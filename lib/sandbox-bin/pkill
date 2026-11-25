@@ -1,0 +1,16 @@
+#!/bin/bash
+# pkill stand-in for kali-looks' hidden sessions: signals only processes on this display.
+sig=TERM; args=()
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    --signal) sig=$2; shift ;;
+    --signal=*) sig=${1#*=} ;;
+    -[0-9]*|-[A-Z]*) sig=${1#-} ;;
+    -e|--echo) ;;
+    *) args+=("$1") ;;
+  esac
+  shift
+done
+pids=$("$(dirname "$0")/pgrep" "${args[@]}") || exit 1
+# shellcheck disable=SC2086
+kill -s "$sig" $pids

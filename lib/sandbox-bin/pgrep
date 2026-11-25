@@ -1,0 +1,14 @@
+#!/bin/bash
+# pgrep stand-in for kali-looks' hidden sessions: only report processes on this
+# hidden display, so installers never act on your real desktop's processes.
+on_display() { { tr '\0' '\n' < "/proc/$1/environ"; } 2>/dev/null | grep -qx "DISPLAY=$DISPLAY"; }
+[[ -n ${DISPLAY:-} ]] || exec /usr/bin/pgrep "$@"
+out=$(/usr/bin/pgrep "$@"); rc=$?
+[[ $rc -le 1 ]] || exit $rc
+found=1
+while IFS= read -r line; do
+  [[ -n $line ]] || continue
+  pid=${line%% *}
+  if on_display "$pid"; then printf '%s\n' "$line"; found=0; fi
+done <<<"$out"
+exit $found

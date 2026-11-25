@@ -11,7 +11,11 @@ done
 cmd=${args[0]:-}; units=("${args[@]:1}")
 dir="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
 restart_shell() {
-  kquitapp6 plasmashell >/dev/null 2>&1 || pkill -x -u "$(id -u)" plasmashell 2>/dev/null
+  local p
+  # only this display's plasmashell, never the one on your real desktop
+  for p in $(pgrep -x -u "$(id -u)" plasmashell); do
+    if { tr '\0' '\n' < "/proc/$p/environ"; } 2>/dev/null | grep -qx "DISPLAY=$DISPLAY"; then kill "$p"; fi
+  done
   sleep 1
   setsid plasmashell >/dev/null 2>&1 < /dev/null &
 }

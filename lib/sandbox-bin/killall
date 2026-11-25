@@ -1,0 +1,19 @@
+#!/bin/bash
+# killall stand-in for kali-looks' hidden sessions: only this display's processes.
+sig=TERM; names=()
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    -s|--signal) sig=$2; shift ;;
+    -[0-9]*|-[A-Z]*) sig=${1#-} ;;
+    -*) ;;
+    *) names+=("$1") ;;
+  esac
+  shift
+done
+rc=1
+for n in "${names[@]}"; do
+  pids=$("$(dirname "$0")/pgrep" -x "$n") || continue
+  # shellcheck disable=SC2086
+  kill -s "$sig" $pids && rc=0
+done
+exit $rc
