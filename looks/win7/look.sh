@@ -179,28 +179,29 @@ look_rebuild() { rm -f "$W7_MANIFESTS/libplasma-version"; look_prepare; }
 # looks remove win7: delete what was installed and put Kali's own packages back
 look_remove() {
   w7_installed || { ok "AeroThemePlasma isn't installed."; return 0; }
-  local f script="$W7_SRC/remove-as-root.sh"; local -a owned=()
-  log "Working out which files belong to Kali packages"
-  while IFS= read -r f; do
-    [[ -e $f ]] || continue
-    local pkg; pkg=$(dpkg -S "$f" 2>/dev/null | head -n 1 | cut -d: -f1) || true
-    [[ -n $pkg ]] && owned+=("$pkg")
-  done < <(cat "$W7_MANIFESTS"/*.txt | sort -u)
-  mapfile -t owned < <(printf '%s\n' "${owned[@]}" | sort -u)
-  {
-    echo "set -e"
-    echo "cat '$W7_MANIFESTS'/*.txt | sort -u | while IFS= read -r f; do"
-    echo "  [ -e \"\$f\" ] || continue"
-    echo "  dpkg -S \"\$f\" >/dev/null 2>&1 || rm -f \"\$f\""
-    echo "done"
-    if [[ ${#owned[@]} -gt 0 ]]; then
-      echo "DEBIAN_FRONTEND=noninteractive apt-get install -y --reinstall ${owned[*]}"
-    fi
-    echo "update-mime-database /usr/local/share/mime 2>/dev/null || true"
-  } > "$script"
-  log "Removing AeroThemePlasma and reinstalling ${#owned[@]} Kali packages it replaced (asks for your password)"
+  local man="$W7_SRC/installed-files.txt" pk="$W7_SRC/replaced-packages.txt" script="$W7_SRC/remove-as-root.sh"
+  cat "$W7_MANIFESTS"/*-build*.txt | sort -u > "$man"
+  # the same paths as dpkg may list them on a merged-/usr system (/lib/... for /usr/lib/...)
+  { cat "$man"; sed -E 's#^/usr/(lib|lib64|bin|sbin)/#/\1/#' "$man"; } | sort -u > "$man.both"
+  # Packages whose files it overwrote (e.g. libplasma7): reinstall them afterwards
+  grep -l -x -F -f "$man.both" /var/lib/dpkg/info/*.list 2>/dev/null \
+    | xargs -r -n1 basename | sed 's/\.list$//; s/:.*//' | sort -u > "$pk"
+  cat > "$script" <<EOF
+#!/bin/bash
+set -euo pipefail
+# delete what isn't a Kali package's file
+# (dpkg may list /lib/... for /usr/lib/... on merged-/usr systems: count both)
+cat /var/lib/dpkg/info/*.list | sed -E 'p; s#^/(lib|lib64|bin|sbin)/#/usr/\\1/#' | sort -u > /tmp/kali-looks-dpkg-files.txt
+grep -v -x -F -f /tmp/kali-looks-dpkg-files.txt '$man' | while IFS= read -r f; do rm -f -- "\$f"; done
+rm -f /tmp/kali-looks-dpkg-files.txt
+if [ -s '$pk' ]; then
+  DEBIAN_FRONTEND=noninteractive apt-get install -y --reinstall \$(cat '$pk')
+fi
+update-mime-database /usr/local/share/mime 2>/dev/null || true
+EOF
+  log "Removing AeroThemePlasma ($(wc -l < "$man") files) and reinstalling: $(tr '\n' ' ' < "$pk")(asks for your password)"
   as_root bash "$script" || die "Removing failed."
   rm -rf "$W7_MANIFESTS"
   look_leave
-  ok "AeroThemePlasma removed."
+  ok "AeroThemePlasma removed. Log out and back in."
 }
