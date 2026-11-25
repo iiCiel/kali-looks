@@ -4,6 +4,8 @@
 #   looks list                     show the looks and which one is active
 #   looks apply <look> [variant]   e.g. looks apply macos dark | looks apply winxp
 #   looks revert                   put your desktop back the way it was
+#   looks rebuild win7             rebuild Windows 7 after a Plasma update
+#   looks remove win7              uninstall AeroThemePlasma completely
 #   looks install                  install the `looks` command into ~/.local/bin
 #   looks help
 set -Eeuo pipefail
@@ -89,12 +91,18 @@ cmd_install() {
   ok "Installed: $BIN_DIR/looks  (make sure $BIN_DIR is on your PATH)"
 }
 
-usage() { sed -n '2,8p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//'; }
 
 case "${1:-help}" in
   list|ls) cmd_list ;;
   apply|use) shift; cmd_apply "$@" ;;
   revert|reset) cmd_revert ;;
+  rebuild|remove)
+    [[ -n ${2:-} ]] || die "Which look? e.g. looks $1 win7"
+    load_look "$2"
+    declare -F "look_$1" >/dev/null || die "$LOOK_TITLE has nothing to $1."
+    mkdir -p "$DATA_DIR" "$CONF_DIR" "$SRC_DIR"
+    "look_$1" ;;
   install) cmd_install ;;
   status) echo "$(state_get LOOK || true) $(state_get VARIANT || true)" ;;
   -h|--help|help) usage ;;

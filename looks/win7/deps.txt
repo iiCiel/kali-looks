@@ -1,0 +1,21 @@
+# AeroThemePlasma build dependencies on Kali/Debian (from its INSTALL.md, adapted)
+build-essential cmake ninja-build curl git extra-cmake-modules
+libqt6virtualkeyboard6 libqt6multimedia6 libqt6core5compat6 libplasma5support6 libkdecorations3-dev
+libkf6colorscheme-dev libkf6i18n-dev libkf6iconthemes-dev libkf6kcmutils-dev libkirigami-dev libkf6kio-dev
+libkf6notifications-dev libkf6svg-dev libkf6crash-dev libkf6globalaccel-dev libplasma-dev libplasmaactivities-dev
+libxcb-composite0-dev libxcb-randr0-dev libxcb-shm0-dev libxcb-damage0-dev libepoxy-dev qt6-svg-dev kwin-dev
+plasma-wayland-protocols libkf6qqc2desktopstyle-dev libplasma5support-dev libkf6auth-dev libkf6newstuff-dev
+libkf6notifyconfig-dev libkf6attica-dev libkf6runner-dev libkf6dbusaddons-dev libkf6sonnet-dev libkf6xmlgui-dev
+libkf6coreaddons-dev libkf6widgetsaddons-dev libkf6guiaddons-dev qt6-base-dev qt6-5compat-dev
+qml6-module-org-kde-desktop libplasmaactivitiesstats-dev plasma-workspace-dev libkf6statusnotifieritem-dev
+qml6-module-org-kde-kirigamiaddons-sounds kwin-x11 kwin-x11-dev
+qt6-base-private-dev qt6-declarative-dev qt6-declarative-private-dev qt6-wayland-dev libkf6windowsystem-dev
+libkf6config-dev libkf6package-dev libkf6configwidgets-dev libpolkit-qt6-1-dev 
+libksysguard-dev libkf6itemmodels-dev libkf6textwidgets-dev libkf6service-dev libkf6jobwidgets-dev
+libkf6archive-dev libkf6holidays-dev libkf6unitconversion-dev libkf6people-dev
+libkf6declarative-dev kirigami-addons-dev libkf6doctools-dev libkf6idletime-dev libkf6solid-dev
+libkf6su-dev libkf6wallet-dev libkf6prison-dev libkf6filemetadata-dev libkf6bookmarks-dev libkf6completion-dev
+libkf6parts-dev libkf6texteditor-dev libkf6userfeedback-dev libkf6networkmanagerqt-dev libkf6bluezqt-dev
+libkf6pulseaudioqt-dev libcanberra-dev libpulse-dev libkf6kcmutils-dev libplasma-dev 
+libkpipewire-dev libwayland-dev wayland-protocols libxkbcommon-dev libdrm-dev
+gettext
