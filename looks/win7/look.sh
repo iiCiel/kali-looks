@@ -165,7 +165,7 @@ w7_fonts() {
   done
   if [[ -z $src ]] && command -v udisksctl >/dev/null; then
     while read -r dev; do
-      mnt=$(udisksctl mount --no-user-interaction -b "$dev" -o ro 2>/dev/null | sed -n 's/.* at \(.*\)$/\1/p' | sed 's/\.$//')
+      mnt=$(udisksctl mount --no-user-interaction -b "$dev" -o ro 2>/dev/null | sed -n 's/.* at \(.*\)$/\1/p' | sed 's/\.$//') || true
       [[ -n $mnt ]] || continue
       if [[ -f $mnt/Windows/Fonts/segoeui.ttf ]]; then src="$mnt/Windows/Fonts"; mounted=$dev; break; fi
       udisksctl unmount --no-user-interaction -b "$dev" >/dev/null 2>&1 || true
