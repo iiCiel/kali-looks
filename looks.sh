@@ -6,6 +6,8 @@
 #   looks revert                   put your desktop back the way it was
 #   looks rebuild win7             rebuild Windows 7 after a Plasma update
 #   looks remove win7              uninstall AeroThemePlasma completely
+#   looks sessions                 add each look to the login screen's session menu
+#   looks sessions remove          take them off again
 #   looks install                  install the `looks` command into ~/.local/bin
 #   looks help
 set -Eeuo pipefail
@@ -15,6 +17,8 @@ HERE="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
 source "$HERE/lib/common.sh"
 # shellcheck source=lib/snapshot.sh
 source "$HERE/lib/snapshot.sh"
+# shellcheck source=lib/sessions.sh
+source "$HERE/lib/sessions.sh"
 
 all_looks() { local d; for d in "$HERE"/looks/*/; do [[ -f $d/look.sh ]] && basename "$d"; done; }
 
@@ -91,7 +95,7 @@ cmd_install() {
   ok "Installed: $BIN_DIR/looks  (make sure $BIN_DIR is on your PATH)"
 }
 
-usage() { sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'; }
 
 case "${1:-help}" in
   list|ls) cmd_list ;;
@@ -104,6 +108,14 @@ case "${1:-help}" in
     mkdir -p "$DATA_DIR" "$CONF_DIR" "$SRC_DIR"
     "look_$1" ;;
   install) cmd_install ;;
+  sessions)
+    case ${2:-install} in
+      install|add) cmd_sessions_install ;;
+      remove|uninstall) cmd_sessions_remove ;;
+      *) die "usage: looks sessions [install|remove]" ;;
+    esac ;;
+  session-hook) cmd_session_hook "${2:-}" ;;
+  firstrun) [[ -n ${2:-} ]] || die "usage: looks firstrun <look>"; cmd_firstrun "$2" ;;
   status) echo "$(state_get LOOK || true) $(state_get VARIANT || true)" ;;
   -h|--help|help) usage ;;
   --version) echo "looks $LOOKS_VERSION" ;;

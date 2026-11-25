@@ -103,6 +103,12 @@ while IFS='|' read -r name src bdir args; do
 done < "$LOGS/steps.txt"
 update-mime-database /usr/local/share/mime 2>/dev/null || true
 update-mime-database /usr/share/mime 2>/dev/null || true
+# with kali-looks' own "Windows 7" session installed, keep AeroThemePlasma's duplicates hidden
+if [ -f /usr/share/xsessions/kali-looks-win7.desktop ]; then
+  for f in /usr/share/xsessions/aerothemeplasmax11.desktop /usr/share/wayland-sessions/aerothemeplasma.desktop; do
+    [ -f "$f" ] && ! grep -q '^NoDisplay=true' "$f" && echo 'NoDisplay=true' >> "$f"
+  done
+fi
 echo "==> Done"
 EOF
 }

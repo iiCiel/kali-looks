@@ -12,6 +12,7 @@ looks apply macos           # or: looks apply macos dark
 looks apply winxp
 looks apply win7            # builds it the first time, then log out and back in
 looks revert                # your own desktop back, exactly as it was
+looks sessions              # or: pick each look from the login screen instead
 ```
 
 | macOS | Windows XP | Windows 7 |
@@ -27,6 +28,14 @@ Run `looks apply macos` / `winxp` from a terminal inside a Plasma session: the s
 | **macOS** (`light` / `dark`) | Menu bar with the focused app's name and File/Edit/View menus on **every screen**, a magnifying dock with Downloads and Trash, Mac window buttons on the left, Spotlight on Super+Space (KRunner), Mission Control on Ctrl+Up (KWin Overview), Launchpad in the dock and on F4, original wave wallpapers. | [WhiteSur-kde](https://github.com/vinceliuice/WhiteSur-kde), [WhiteSur GTK/icons/cursors](https://github.com/vinceliuice), [Plank Reloaded](https://github.com/zquestz/plank-reloaded), [Window Title](https://github.com/dhruv8sh/plasma6-window-title-applet) |
 | **Windows XP** (`luna`) | Blue Luna taskbar with a green start button on every screen, cascading start menu, XP window borders and buttons, Luna-styled Qt and GTK apps (Firefox too), green-hills wallpaper. | [Expose](https://www.opencode.net/phob1an/expose) by phob1an, [Windows XP for GTK](https://github.com/B00merang-Project/Windows-XP) by B00merang |
 | **Windows 7** (`aero`) | The full Aero desktop: glass, Superbar, start orb and menu, Aero window frames, gadgets, sounds, its own login session. | [AeroThemePlasma](https://github.com/aeroshell-desktop/aerothemeplasma) |
+
+## Pick a look at the login screen
+
+```bash
+looks sessions          # one-time: adds the looks to the login screen (asks for your password)
+```
+
+Log out and choose **macOS (KDE Plasma)**, **Windows XP (KDE Plasma)** or **Windows 7 (AeroThemePlasma)** in the login screen's session menu. Each session keeps its own settings: what you change in the macOS session stays there, and plain Xfce or Plasma sessions get their own settings back. That works through a small hook in `~/.xsessionrc` that swaps the desktop settings before the session starts. The first login into a look sets it up automatically. `looks sessions remove` takes it all off again. X11 sessions only; Wayland sessions don't run `~/.xsessionrc`.
 
 ## How switching works
 
