@@ -200,6 +200,14 @@ w7_wallpaper() {
   if [[ -f $own ]]; then echo "$own"; else echo "$dir/aero.jpg"; fi
 }
 
+w7_player() {
+  local f
+  for f in org.kde.haruna vlc org.xfce.Parole mpv; do
+    [[ -f /usr/share/applications/$f.desktop ]] && { echo "applications:$f.desktop"; return; }
+  done
+  echo "preferred://filemanager"
+}
+
 w7_setup() {
   local p wp pv
   w7_fonts
@@ -227,7 +235,13 @@ w7_setup() {
       d.wallpaperPlugin = 'org.kde.image';
       d.currentConfigGroup = ['Wallpaper', 'org.kde.image', 'General'];
       d.writeConfig('Image', 'file://$wp'); d.writeConfig('FillMode', 2);
-    });" >/dev/null || warn "Couldn't arrange the desktop"
+    });
+    // Pinned like a fresh Windows 7: browser, Explorer, Media Player
+    panels().forEach(function (p) { p.widgets('io.gitgud.wackyideas.seventasks').forEach(function (w) {
+      w.currentConfigGroup = ['General'];
+      w.writeConfig('launchers', ['preferred://browser', 'applications:org.kde.dolphin.desktop', '$(w7_player)']);
+      w.reloadConfig();
+    }); });" >/dev/null || warn "Couldn't arrange the desktop"
 }
 
 look_setup() { w7_setup; }
