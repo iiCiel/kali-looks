@@ -355,7 +355,13 @@ cmd_sandbox() {
       fi
       cmd=$(session_field "$look" 3 2>/dev/null || echo startplasma-x11)
       mapfile -t env_kv < <(sandbox_env "$look")
-      setsid env -i "${env_kv[@]}" dbus-run-session "$cmd" >"$log" 2>&1 < /dev/null &
+      # In its own scope, outside your login session: otherwise locking your screen
+      # (or the laptop sleeping) would lock the hidden session too.
+      local -a scope=()
+      if systemd-run --user --scope --quiet true 2>/dev/null; then
+        scope=(systemd-run --user --scope --quiet --collect --unit="kali-looks-sandbox-$look-$$")
+      fi
+      setsid "${scope[@]}" env -i "${env_kv[@]}" dbus-run-session "$cmd" >"$log" 2>&1 < /dev/null &
       for i in $(seq 60); do sandbox_bus "$look" >/dev/null && break; sleep 1; done
       sandbox_bus "$look" >/dev/null || die "The hidden $look session didn't start (see $log)."
       ok "Hidden $look session running on $d" ;;
