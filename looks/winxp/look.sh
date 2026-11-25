@@ -90,6 +90,12 @@ look_apply() {
   kwriteconfig6 --file kwinrc --group org.kde.kdecoration2 --key ButtonsOnRight "IAX"
   kwriteconfig6 --file kdeglobals --group KDE --key widgetStyle kvantum
   kwriteconfig6 --file "$CONF_HOME/Kvantum/kvantum.kvconfig" --group General --key theme Expose
+  # No XP icon set ships with it: use your own icons and cursor, not the previous look's
+  local icons cursor
+  icons=$(kreadconfig6 --file "$ORIG_DIR/config/kdeglobals" --group Icons --key Theme 2>/dev/null || true)
+  cursor=$(kreadconfig6 --file "$ORIG_DIR/config/kcminputrc" --group Mouse --key cursorTheme 2>/dev/null || true)
+  kwriteconfig6 --file kdeglobals --group Icons --key Theme "${icons:-breeze}"
+  plasma-apply-cursortheme "${cursor:-breeze_cursors}" >/dev/null 2>&1 || true
   local wp; wp=$(find "$LOCAL_SHARE/wallpapers/Bløff" -name '*.png' -o -name '*.jpg' | sort | tail -n 1)
   [[ -n $wp ]] && plasma-apply-wallpaperimage "$wp" >/dev/null 2>&1 || true
 
