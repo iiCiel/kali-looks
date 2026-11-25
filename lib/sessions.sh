@@ -363,9 +363,12 @@ cmd_sandbox() {
       fi
       # The desktop gets a stand-in system bus without logind: otherwise its screen
       # locker follows your real session's lock state and locks the hidden one too.
-      local sysbus
-      sysbus=$(dbus-daemon --session --fork --print-address=1 --nopidfile 2>/dev/null | head -1)
-      [[ -n $sysbus ]] && env_kv+=("DBUS_SYSTEM_BUS_ADDRESS=$sysbus")
+      local -a bus=()
+      mapfile -t bus < <(dbus-daemon --session --fork --print-address=1 --print-pid=1 --nopidfile 2>/dev/null)
+      if [[ -n ${bus[0]:-} ]]; then
+        env_kv+=("DBUS_SYSTEM_BUS_ADDRESS=${bus[0]}")
+        echo "${bus[1]:-}" > "$DATA_DIR/sandbox/$look/sysbus.pid"
+      fi
       setsid "${scope[@]}" env -i "${env_kv[@]}" dbus-run-session "$cmd" >"$log" 2>&1 < /dev/null &
       for i in $(seq 60); do sandbox_bus "$look" >/dev/null && break; sleep 1; done
       sandbox_bus "$look" >/dev/null || die "The hidden $look session didn't start (see $log)."
@@ -375,6 +378,7 @@ cmd_sandbox() {
         if { tr '\0' '\n' < "/proc/$p/environ"; } 2>/dev/null | grep -qx "DISPLAY=$d"; then kill "$p" 2>/dev/null || true; fi
       done
       sleep 2; pkill -f "Xvfb $d " || true
+      if [[ -s $DATA_DIR/sandbox/$look/sysbus.pid ]]; then kill "$(cat "$DATA_DIR/sandbox/$look/sysbus.pid")" 2>/dev/null || true; rm -f "$DATA_DIR/sandbox/$look/sysbus.pid"; fi
       ok "Hidden $look session stopped" ;;
     shot)
       mkdir -p "$DATA_DIR/sandbox/$look/shots"
