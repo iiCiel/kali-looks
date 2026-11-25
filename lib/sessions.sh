@@ -293,12 +293,18 @@ sandbox_home() { echo "$DATA_DIR/sandbox/$1/home"; }
 sandbox_runtime() { echo "/tmp/kali-looks-sandbox-$(id -u)-$1"; }
 sandbox_display() { case $1 in macos) echo :5 ;; winxp) echo :6 ;; win7) echo :7 ;; *) echo :8 ;; esac; }
 
+session_lang() {
+  local l=${LANG:-}
+  [[ -z $l || $l == C || $l == POSIX ]] && l=$(sed -n 's/^LANG=//p' /etc/default/locale 2>/dev/null | tr -d '"')
+  echo "${l:-C.UTF-8}"
+}
+
 sandbox_env() { # prints KEY=VALUE lines
   local look=$1 h rt d
   h=$(sandbox_home "$look"); rt=$(sandbox_runtime "$look"); d=$(sandbox_display "$look")
   printf '%s\n' "HOME=$h" "DISPLAY=$d" "XDG_RUNTIME_DIR=$rt" "XDG_SESSION_TYPE=x11" \
     "XDG_CURRENT_DESKTOP=KDE" "XDG_SESSION_DESKTOP=KDE" "KDE_FULL_SESSION=true" "KDE_SESSION_VERSION=6" \
-    "DESKTOP_SESSION=kali-looks-$look" "LANG=${LANG:-C.UTF-8}" \
+    "DESKTOP_SESSION=kali-looks-$look" "LANG=$(session_lang)" \
     "PATH=$HOME/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" \
     "USER=$USER" "LOGNAME=$USER" "SHELL=/bin/bash" "XDG_CONFIG_HOME=$h/.config"
 }
@@ -321,7 +327,7 @@ sandbox_bus() {
   local look=$1 p d
   d=$(sandbox_display "$look")
   for p in $(pgrep -u "$(id -u)" -x plasmashell); do
-    if tr '\0' '\n' < "/proc/$p/environ" 2>/dev/null | grep -qx "DISPLAY=$d"; then
+    if { tr '\0' '\n' < "/proc/$p/environ"; } 2>/dev/null | grep -qx "DISPLAY=$d"; then
       tr '\0' '\n' < "/proc/$p/environ" | sed -n 's/^DBUS_SESSION_BUS_ADDRESS=//p'; return 0
     fi
   done
@@ -349,7 +355,7 @@ cmd_sandbox() {
       ok "Hidden $look session running on $d" ;;
     stop)
       for p in $(pgrep -u "$(id -u)"); do
-        tr '\0' '\n' < "/proc/$p/environ" 2>/dev/null | grep -qx "DISPLAY=$d" && kill "$p" 2>/dev/null
+        if { tr '\0' '\n' < "/proc/$p/environ"; } 2>/dev/null | grep -qx "DISPLAY=$d"; then kill "$p" 2>/dev/null || true; fi
       done
       sleep 2; pkill -f "Xvfb $d " || true
       ok "Hidden $look session stopped" ;;
