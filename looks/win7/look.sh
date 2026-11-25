@@ -25,6 +25,7 @@ W7_REPOS=(
 )
 
 W7_SRC="$SRC_DIR/win7"
+W7_SELAWIK_SHA256="3f62c51e05e3b5a1e6241cf92a371f0be2ea1183aa87b30718bbd40832a8d423"
 W7_MANIFESTS="$DATA_DIR/win7-manifests"
 W7_LIBEXEC="lib/$(dpkg-architecture -qDEB_HOST_MULTIARCH 2>/dev/null || echo x86_64-linux-gnu)/libexec"
 
@@ -147,14 +148,86 @@ w7_build() {
 
 look_prepare() { w7_build; }
 
-# First login: AeroThemePlasma's own setup runs in the fresh session. Do it now in the
-# hidden session so the real first login is already finished.
-w7_setup() {
-  local i
-  for i in $(seq 90); do
-    [[ -n $(kreadconfig6 --file "$LOOK_CFG/kdeglobals" --group KDE --key LookAndFeelPackage 2>/dev/null) ]] && break
-    sleep 2
+# AeroThemePlasma's first-login wizard (atpootb) applies its look; it would also
+# reconfigure SDDM, which Kali doesn't use. Do the look part here, the way the wizard does.
+W7_EFFECTS_ON="smodpeekscript minimizeall aeroglassblur aeroglide smodglow smodpeekeffect libkwin_effect_smodsnap launchfeedback fadingpopupsaero squashaero dimscreenaero aeroshell-thumbnails"
+W7_EFFECTS_OFF="blur contrast login logout maximize scale squash slide fade slidingpopups slidingnotifications dialogparent fadingpopups windowaperture"
+W7_FONT="Segoe UI,9,-1,5,400,0,0,0,0,0,0,0,0,0,0,1"
+W7_FONT_SMALL="Segoe UI,8,-1,5,400,0,0,0,0,0,0,0,0,0,0,1"
+
+# Windows 7 is drawn in Segoe UI. Use the copy on this computer's own Windows install if
+# there is one; otherwise Selawik, Microsoft's open-licence stand-in with the same metrics.
+w7_fonts() {
+  local dest="$LOCAL_SHARE/fonts/windows" src="" dev mnt mounted="" f
+  fc-list | grep -qi 'Segoe UI' && return 0
+  for mnt in /media/"$USER"/* /run/media/"$USER"/* /mnt/*; do
+    [[ -f $mnt/Windows/Fonts/segoeui.ttf ]] && { src="$mnt/Windows/Fonts"; break; }
   done
+  if [[ -z $src ]] && command -v udisksctl >/dev/null; then
+    while read -r dev; do
+      mnt=$(udisksctl mount --no-user-interaction -b "$dev" -o ro 2>/dev/null | sed -n 's/.* at \(.*\)$/\1/p' | sed 's/\.$//')
+      [[ -n $mnt ]] || continue
+      if [[ -f $mnt/Windows/Fonts/segoeui.ttf ]]; then src="$mnt/Windows/Fonts"; mounted=$dev; break; fi
+      udisksctl unmount --no-user-interaction -b "$dev" >/dev/null 2>&1 || true
+    done < <(lsblk -nrpo NAME,FSTYPE | awk '$2=="ntfs"{print $1}')
+  fi
+  mkdir -p "$dest"
+  if [[ -n $src ]]; then
+    log "Using Segoe UI from your Windows install ($src)"
+    for f in segoeui segoeuib segoeuii segoeuiz segoeuil seguili segoeuisl seguisli seguisb seguisbi seguisym tahoma tahomabd; do
+      [[ -f $src/$f.ttf ]] && cp -f "$src/$f.ttf" "$dest/"
+    done
+    [[ -n $mounted ]] && udisksctl unmount --no-user-interaction -b "$mounted" >/dev/null 2>&1
+  else
+    log "No Windows install found: using Selawik (Segoe UI's open-licence stand-in)"
+    local zip="$DL_DIR/selawik.zip"
+    curl -fsSL -o "$zip" "https://github.com/microsoft/Selawik/releases/download/1.01/Selawik_Release.zip" \
+      && sha_ok "$zip" "$W7_SELAWIK_SHA256" && unzip -o -j -q "$zip" '*.ttf' -d "$dest" \
+      || warn "Couldn't get Selawik; Windows 7 will use a fallback font."
+    mkdir -p "$LOOK_CFG/fontconfig/conf.d"
+    cat > "$LOOK_CFG/fontconfig/conf.d/60-segoe-ui.conf" <<'XML'
+<?xml version="1.0"?><!DOCTYPE fontconfig SYSTEM "fonts.dtd">
+<fontconfig><alias binding="same"><family>Segoe UI</family><prefer><family>Selawik</family></prefer></alias></fontconfig>
+XML
+  fi
+  fc-cache -f "$dest" >/dev/null 2>&1 || true
+}
+
+w7_wallpaper() {
+  local own="$DATA_DIR/win7-wallpaper.jpg" dir="$LOCAL_SHARE/wallpapers/kali-looks-aero"
+  mkdir -p "$dir"
+  cp -f "$LOOK_DIR/aero-wallpaper.jpg" "$dir/aero.jpg"
+  if [[ -f $own ]]; then echo "$own"; else echo "$dir/aero.jpg"; fi
+}
+
+w7_setup() {
+  local p wp pv
+  w7_fonts
+  wp=$(w7_wallpaper)
+  look_run kwriteconfig6 --file kdeglobals --group General --key font "$W7_FONT"
+  look_run kwriteconfig6 --file kdeglobals --group General --key smallestReadableFont "$W7_FONT_SMALL"
+  look_run kwriteconfig6 --file kdeglobals --group General --key toolBarFont "$W7_FONT"
+  look_run kwriteconfig6 --file kdeglobals --group General --key menuFont "$W7_FONT"
+  look_run kwriteconfig6 --file kdeglobals --group WM --key activeFont "$W7_FONT"
+  for p in $W7_EFFECTS_ON; do look_run kwriteconfig6 --file kwinrc --group Plugins --key "${p}Enabled" true; done
+  for p in $W7_EFFECTS_OFF; do look_run kwriteconfig6 --file kwinrc --group Plugins --key "${p}Enabled" false; done
+  look_run qdbus6 org.kde.KWin /KWin reconfigure >/dev/null 2>&1 || true
+  look_run plasma-apply-lookandfeel -a authui7 >/dev/null 2>&1 || warn "plasma-apply-lookandfeel reported a problem"
+  look_run kvantummanager --set Windows7Aero >/dev/null 2>&1 || true
+  look_run plasma-apply-cursortheme aero-drop --size 32 >/dev/null 2>&1 || true
+  look_run aeroshell_update_default_rules aeroshell.rules >/dev/null 2>&1 || true
+  look_run kwriteconfig6 --file aerothemeplasmarc --group OOTB --key wizardRun true
+  pv=$(dpkg-query -W -f='${Version}' plasma-workspace 2>/dev/null | sed -E 's/^[0-9]+://; s/[-+~].*//')
+  look_run kwriteconfig6 --file plasma-welcomerc --group General --key LastSeenVersion "$pv"
+  sleep 3
+  # Desktop icons in columns down the left like Windows; the wallpaper on every screen
+  look_run qdbus6 org.kde.plasmashell /PlasmaShell org.kde.PlasmaShell.evaluateScript "
+    desktops().forEach(function (d) {
+      d.currentConfigGroup = ['General']; d.writeConfig('arrangement', 1); d.writeConfig('alignment', 0);
+      d.wallpaperPlugin = 'org.kde.image';
+      d.currentConfigGroup = ['Wallpaper', 'org.kde.image', 'General'];
+      d.writeConfig('Image', 'file://$wp'); d.writeConfig('FillMode', 2);
+    });" >/dev/null || warn "Couldn't arrange the desktop"
 }
 
 look_setup() { w7_setup; }
