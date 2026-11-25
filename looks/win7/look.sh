@@ -38,54 +38,73 @@ w7_deps() {
 
 w7_installed() { [[ -f $W7_MANIFESTS/aerothemeplasma.txt ]]; }
 
-# Build one CMake project as the normal user. $1 = source dir, $2 = build dir name, rest = cmake args
-w7_build() {
-  local src=$1 bdir=$2; shift 2
-  log "Building $(basename "$src")${bdir:+ ($bdir)}"
-  cmake -S "$src" -B "$src/$bdir" -G Ninja -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_BUILD_TYPE=Release "$@" \
-    > "$W7_SRC/logs/$(basename "$src")-$bdir.cmake.log" 2>&1 \
-    || die "Configuring $(basename "$src") failed; see $W7_SRC/logs/"
-  cmake --build "$src/$bdir" -j"$(nproc)" > "$W7_SRC/logs/$(basename "$src")-$bdir.build.log" 2>&1 \
-    || die "Building $(basename "$src") failed; see $W7_SRC/logs/$(basename "$src")-$bdir.build.log"
-  W7_BUILDS+=("$src/$bdir")
-}
-
-w7_build_all() {
-  mkdir -p "$W7_SRC/logs"
-  W7_BUILDS=()
+# Everything that needs root happens in one script (one password prompt): install the
+# build dependencies, then for each component compile it AS YOU (runuser) and install it
+# as root right away (later components build against earlier ones), keeping manifests.
+w7_steps() {
   local S="$W7_SRC"
-  # Same order and options as AeroThemePlasma's install.sh (libplasma first)
-  w7_build "$S/libplasma" build
-  w7_build "$S/uac-polkit-agent" build -DCMAKE_INSTALL_LIBEXECDIR="$W7_LIBEXEC/kf6"
-  w7_build "$S/smod" build
-  w7_build "$S/smod" build-x11 -DBUILD_DECORATION=OFF -DBUILD_EFFECTX11=ON
-  w7_build "$S/aeroshell-workspace" build
-  w7_build "$S/aeroshell-kwin-components" build -DKWIN_BUILD_WAYLAND=ON
-  w7_build "$S/aeroshell-kwin-components" build_x11 -DKWIN_BUILD_WAYLAND=OFF -DKWIN_INSTALL_MISC=OFF
-  w7_build "$S/aeroshell-sddm-kcm" build
-  w7_build "$S/aerothemeplasma-icons" build
-  w7_build "$S/aerothemeplasma-sounds" build
-  w7_build "$S/aerothemeplasma" build -DCMAKE_INSTALL_LIBEXECDIR="$W7_LIBEXEC"
-  w7_build "$S/aerothemeplasma" build_x11 -DCMAKE_INSTALL_LIBEXECDIR="$W7_LIBEXEC" -DINSTALL_X11_COMPONENTS=ON
+  # name|source|build dir|extra cmake args  (same order and options as upstream install.sh)
+  cat <<EOF
+libplasma|$S/libplasma|build|
+uac-polkit-agent|$S/uac-polkit-agent|build|-DCMAKE_INSTALL_LIBEXECDIR=$W7_LIBEXEC/kf6
+smod|$S/smod|build|
+smod|$S/smod|build-x11|-DBUILD_DECORATION=OFF -DBUILD_EFFECTX11=ON
+aeroshell-workspace|$S/aeroshell-workspace|build|
+aeroshell-kwin-components|$S/aeroshell-kwin-components|build|-DKWIN_BUILD_WAYLAND=ON
+aeroshell-kwin-components|$S/aeroshell-kwin-components|build_x11|-DKWIN_BUILD_WAYLAND=OFF -DKWIN_INSTALL_MISC=OFF
+aeroshell-sddm-kcm|$S/aeroshell-sddm-kcm|build|
+aerothemeplasma-icons|$S/aerothemeplasma-icons|build|
+aerothemeplasma-sounds|$S/aerothemeplasma-sounds|build|
+aerothemeplasma|$S/aerothemeplasma|build|-DCMAKE_INSTALL_LIBEXECDIR=$W7_LIBEXEC
+aerothemeplasma|$S/aerothemeplasma|build_x11|-DCMAKE_INSTALL_LIBEXECDIR=$W7_LIBEXEC -DINSTALL_X11_COMPONENTS=ON
+EOF
 }
 
-# Install every build in one root step (one password prompt), keeping each manifest.
-w7_install_all() {
-  local script="$W7_SRC/install-as-root.sh" b
-  {
-    echo "set -e"
-    for b in "${W7_BUILDS[@]}"; do echo "cmake --install '$b'"; done
-    echo "update-mime-database /usr/local/share/mime 2>/dev/null || true"
-    echo "update-mime-database /usr/share/mime 2>/dev/null || true"
-  } > "$script"
-  log "Installing AeroThemePlasma (asks for your password)"
-  as_root bash "$script" > "$W7_SRC/logs/install.log" 2>&1 || die "Installing failed; see $W7_SRC/logs/install.log"
-  mkdir -p "$W7_MANIFESTS"
-  for b in "${W7_BUILDS[@]}"; do
-    [[ -f $b/install_manifest.txt ]] && cp "$b/install_manifest.txt" "$W7_MANIFESTS/$(basename "$(dirname "$b")")-$(basename "$b").txt"
-  done
-  cp "$W7_MANIFESTS/aerothemeplasma-build.txt" "$W7_MANIFESTS/aerothemeplasma.txt"
-  dpkg-query -W -f='${Version}' libplasma7 > "$W7_MANIFESTS/libplasma-version" 2>/dev/null || true
+w7_root_script() {
+  local -a missing=(); local p
+  for p in $(w7_deps); do pkg_installed "$p" || missing+=("$p"); done
+  cat <<EOF
+#!/bin/bash
+set -euo pipefail
+U='$(id -un)'
+LOGS='$W7_SRC/logs'
+MAN='$W7_MANIFESTS'
+EOF
+  if [[ ${#missing[@]} -gt 0 ]]; then
+    echo "echo '==> Installing ${#missing[@]} build dependencies'"
+    echo "DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ${missing[*]} > \"\$LOGS/deps.log\" 2>&1 || { echo 'error: installing build dependencies failed; see '\"\$LOGS/deps.log\"; exit 1; }"
+  fi
+  cat <<'EOF'
+# Compile with the GCC that matches the system's C++ runtime (Kali can be mid-transition:
+# libraries built with a newer GCC than the default g++).
+GCCV=$(dpkg-query -W -f='${Version}' libstdc++6 | sed -E 's/^[0-9]+://; s/\..*//')
+if [[ $GCCV =~ ^[0-9]+$ ]] && ! command -v "g++-$GCCV" >/dev/null; then
+  echo "==> Installing g++-$GCCV (matches the system C++ library)"
+  DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "g++-$GCCV" > "$LOGS/gcc.log" 2>&1 \
+    || { echo "error: installing g++-$GCCV failed; see $LOGS/gcc.log"; exit 1; }
+fi
+CCX="CC=gcc CXX=g++"
+command -v "g++-$GCCV" >/dev/null && CCX="CC=gcc-$GCCV CXX=g++-$GCCV"
+runuser -u "$U" -- mkdir -p "$MAN"
+while IFS='|' read -r name src bdir args; do
+  [[ -n $name ]] || continue
+  echo "==> Building $name ($bdir)"
+  log="$LOGS/$name-$bdir.log"
+  # shellcheck disable=SC2086
+  # a build dir configured with another compiler can't be reused
+  if [[ -f $src/$bdir/CMakeCache.txt ]] && ! grep -q "CMAKE_CXX_COMPILER:.*g++-$GCCV" "$src/$bdir/CMakeCache.txt"; then
+    runuser -u "$U" -- rm -rf "$src/$bdir"
+  fi
+  runuser -u "$U" -- env $CCX bash -c "cmake -S '$src' -B '$src/$bdir' -G Ninja -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF $args > '$log' 2>&1 && cmake --build '$src/$bdir' -j\$(nproc) >> '$log' 2>&1" \
+    || { echo "error: building $name failed; see $log"; exit 1; }
+  cmake --install "$src/$bdir" >> "$LOGS/install.log" 2>&1 || { echo "error: installing $name failed; see $LOGS/install.log"; exit 1; }
+  cp "$src/$bdir/install_manifest.txt" "$MAN/$name-$bdir.txt"
+  chown "$U": "$src/$bdir/install_manifest.txt" "$MAN/$name-$bdir.txt"
+done < "$LOGS/steps.txt"
+update-mime-database /usr/local/share/mime 2>/dev/null || true
+update-mime-database /usr/share/mime 2>/dev/null || true
+echo "==> Done"
+EOF
 }
 
 look_prepare() {
@@ -97,15 +116,28 @@ look_prepare() {
     warn "Plasma was updated since AeroThemePlasma was built ($built -> $cur); rebuilding."
   fi
   log "Windows 7 needs AeroThemePlasma built from source (about 10-30 minutes)."
-  # shellcheck disable=SC2046
-  need_packages $(w7_deps)
+  need_packages git curl
   local entry name url commit
   for entry in "${W7_REPOS[@]}"; do
     read -r name url commit <<<"$entry"
     SRC_DIR="$W7_SRC" fetch_repo "$name" "$url" "$commit"
   done
-  w7_build_all
-  w7_install_all
+  # Upstream may require a newer Plasma point release than the distro ships yet (e.g.
+  # 6.7.5 vs 6.7.4). Those bumps are version numbers only, so ask for what's installed.
+  local pv f
+  pv=$(dpkg-query -W -f='${Version}' plasma-workspace 2>/dev/null | sed -E 's/^[0-9]+://; s/[-+~].*//')
+  if [[ $pv =~ ^6\.[0-9]+\.[0-9]+$ ]]; then
+    while IFS= read -r -d '' f; do
+      sed -i -E '/find_package\(/ s/\$\{PROJECT_(DEP_)?VERSION\}/'"$pv"'/g' "$f"
+    done < <(find "$W7_SRC" -name CMakeLists.txt -not -path '*/build*' -print0)
+  fi
+  mkdir -p "$W7_SRC/logs"
+  w7_steps > "$W7_SRC/logs/steps.txt"
+  w7_root_script > "$W7_SRC/build-and-install.sh"
+  log "Building and installing AeroThemePlasma (asks for your password once; compiling runs as you)"
+  as_root bash "$W7_SRC/build-and-install.sh" || die "AeroThemePlasma didn't build; see the log named above."
+  cp "$W7_MANIFESTS/aerothemeplasma-build.txt" "$W7_MANIFESTS/aerothemeplasma.txt"
+  dpkg-query -W -f='${Version}' libplasma7 > "$W7_MANIFESTS/libplasma-version" 2>/dev/null || true
   ok "AeroThemePlasma installed"
 }
 

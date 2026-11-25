@@ -20,7 +20,7 @@ Run `looks apply macos` / `winxp` from a terminal inside a Plasma session: the s
 
 | Look | What you get | Built from |
 |---|---|---|
-| **macOS** (`light` / `dark`) | Menu bar with the focused app's File/Edit/View menus on **every screen**, a magnifying dock with Downloads and Trash, Mac window buttons on the left, Spotlight on Super+Space (KRunner), Mission Control on Ctrl+Up (KWin Overview), Launchpad in the dock and on F4, original wave wallpapers. | [WhiteSur-kde](https://github.com/vinceliuice/WhiteSur-kde), [WhiteSur GTK/icons/cursors](https://github.com/vinceliuice), [Plank Reloaded](https://github.com/zquestz/plank-reloaded) |
+| **macOS** (`light` / `dark`) | Menu bar with the focused app's name and File/Edit/View menus on **every screen**, a magnifying dock with Downloads and Trash, Mac window buttons on the left, Spotlight on Super+Space (KRunner), Mission Control on Ctrl+Up (KWin Overview), Launchpad in the dock and on F4, original wave wallpapers. | [WhiteSur-kde](https://github.com/vinceliuice/WhiteSur-kde), [WhiteSur GTK/icons/cursors](https://github.com/vinceliuice), [Plank Reloaded](https://github.com/zquestz/plank-reloaded), [Window Title](https://github.com/dhruv8sh/plasma6-window-title-applet) |
 | **Windows XP** (`luna`) | Blue Luna taskbar with a green start button on every screen, cascading start menu, XP window borders and buttons, Luna-styled Qt and GTK apps (Firefox too), green-hills wallpaper. | [Expose](https://www.opencode.net/phob1an/expose) by phob1an, [Windows XP for GTK](https://github.com/B00merang-Project/Windows-XP) by B00merang |
 | **Windows 7** (`aero`) | The full Aero desktop: glass, Superbar, start orb and menu, Aero window frames, gadgets, sounds, its own login session. | [AeroThemePlasma](https://github.com/aeroshell-desktop/aerothemeplasma) |
 
@@ -51,7 +51,6 @@ Only what's missing, with your password:
 ## Known issues
 
 - **Wayland:** macOS uses a floating dock panel instead of Plank, without magnification. Windows 7's Wayland support is incomplete upstream.
-- The macOS menu bar shows the app's menus but not its name. Plasma's global menu widget doesn't draw it.
 - Some shortcuts (Spotlight, Mission Control, Launchpad) take effect after logging out and back in.
 - XP: the start button is an original drawing, and the wallpaper is phob1an's original art. Microsoft's logo and the "Bliss" photo are their property and aren't included.
 
@@ -63,6 +62,7 @@ kali-looks itself is MIT. The themes it downloads keep their own licences:
 - Windows XP GTK by B00merang: GPL-3.0
 - AeroThemePlasma by the AeroShell project: AGPL-3.0
 - Plank Reloaded: GPL-3.0
+- Window Title applet by Dhruvesh Surolia: GPL-2.0
 
 The macOS wallpapers are original, made for [cupertino-xfce](https://github.com/iiCiel/cupertino-xfce).
 

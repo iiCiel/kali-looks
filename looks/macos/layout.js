@@ -22,7 +22,23 @@ function menuBar(screen) {
         menu.writeConfig("global", "Alt+F1");
     }
 
-    // The focused app's name and File / Edit / View menus
+    // The focused app's name in bold ("Finder" on the desktop), then its File / Edit / View menus
+    var title = bar.addWidget("org.kde.windowtitle");
+    if (title) {
+        title.currentConfigGroup = ["Appearance"];
+        title.writeConfig("txt", "%a");
+        title.writeConfig("altTxt", "Finder");
+        title.writeConfig("txtSameFound", "%a");
+        title.writeConfig("visible", false);   // the app icon (macOS shows only the name)
+        title.writeConfig("isBold", true);
+        title.writeConfig("fontSize", 13);       // pixels, like the menus next to it
+        title.writeConfig("midSpace", 0);
+        title.writeConfig("activityIcon", false);
+        title.writeConfig("lastSpace", 6);
+        title.currentConfigGroup = ["Behavior"];
+        title.writeConfig("filterByScreen", true);
+        title.writeConfig("showTooltip", false);
+    }
     bar.addWidget("org.kde.plasma.appmenu");
     bar.addWidget("org.kde.plasma.panelspacer");
 

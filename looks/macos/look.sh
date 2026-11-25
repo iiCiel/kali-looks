@@ -17,6 +17,9 @@ WHITESUR_ICON_URL="https://github.com/vinceliuice/WhiteSur-icon-theme.git"
 WHITESUR_ICON_COMMIT="73d8040da51a9ed74e47c7366e7e9ff437601a5c"
 WHITESUR_CURSOR_URL="https://github.com/vinceliuice/WhiteSur-cursors.git"
 WHITESUR_CURSOR_COMMIT="e190baf618ed95ee217d2fd45589bd309b37672b"
+# The app's name next to its menus (Plasma's global menu widget doesn't show it)
+WINTITLE_URL="https://github.com/dhruv8sh/plasma6-window-title-applet.git"
+WINTITLE_COMMIT="a6eaf5086a473919ed2fffc5d3b8d98237c2dd41"
 SHA_WHITESUR_LIGHT="2635570e218afab2d34b0663287054f7b995b9f7f810e97410dcad389987d5ba"
 SHA_WHITESUR_DARK="98ac7545ec5290b718875fdfbdd7f0f6b88126103d1eec259ec9fbf80be7b75f"
 
@@ -64,6 +67,12 @@ look_prepare() {
   fetch_repo WhiteSur-gtk-theme "$WHITESUR_GTK_URL" "$WHITESUR_GTK_COMMIT"
   fetch_repo WhiteSur-icon-theme "$WHITESUR_ICON_URL" "$WHITESUR_ICON_COMMIT"
   fetch_repo WhiteSur-cursors "$WHITESUR_CURSOR_URL" "$WHITESUR_CURSOR_COMMIT"
+  fetch_repo plasma6-window-title-applet "$WINTITLE_URL" "$WINTITLE_COMMIT"
+  local WT="$LOCAL_SHARE/plasma/plasmoids/org.kde.windowtitle"
+  rm -rf "$WT"; mkdir -p "$WT"
+  cp -r "$SRC_DIR/plasma6-window-title-applet"/{metadata.json,contents} "$WT/"
+  # It imports a private module Plasma 6.7 no longer ships, but never uses it
+  sed -i '/org\.kde\.plasma\.private\.appmenu/d' "$WT/contents/ui/main.qml"
 
   # Plasma side: copy the parts we use (no upstream install script is run)
   local K="$SRC_DIR/WhiteSur-kde" v
