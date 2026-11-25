@@ -36,7 +36,7 @@ case $cmd in
     if compgen -G "$dir/*.wants/${units[0]}" >/dev/null; then echo enabled; else echo disabled; exit 1; fi ;;
   is-active|is-failed) echo inactive; exit 3 ;;
   restart|try-restart|reload-or-restart|start)
-    for u in "${units[@]}"; do [[ $u == plasma-plasmashell.service ]] && restart_shell; done ;;
+    for u in "${units[@]}"; do [[ ${u%.service} == plasma-plasmashell ]] && restart_shell; done ;;
   show-environment) env ;;
   *) ;;
 esac
