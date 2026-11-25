@@ -46,7 +46,7 @@ look_envs() {
       DBUS_SESSION_BUS_ADDRESS XDG_CONFIG_DIRS XDG_DATA_DIRS; do
       [[ -n ${!k:-} ]] && echo "$k=${!k}"
     done
-    echo "XDG_CONFIG_HOME=$HOME/.config"
+    echo "XDG_CONFIG_HOME=${XDG_CONFIG_HOME:-$(readlink -f "$HOME/.config")}"
   fi
 }
 look_run() { local -a e; mapfile -t e < <(look_envs); env -i "${e[@]}" "$@"; }

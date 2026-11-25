@@ -127,9 +127,11 @@ clean_base_once() {
   touch "$flag"
 }
 
-# Runs before every X session starts. Quick, and never stops the login.
+# Runs before every X session starts. Quick, and never stops the login. Prints the
+# config folder's real path: ~/.xsessionrc exports it as XDG_CONFIG_HOME (some tools
+# refuse to write through the ~/.config link).
 cmd_session_hook() {
-  local ds=${1:-} look target
+  local ds=${1:-} look target=""
   mkdir -p "$DATA_DIR"
   look=$(look_of_session "$ds")
   {
@@ -146,13 +148,17 @@ cmd_session_hook() {
     state_set ACTIVE "$look"
     systemctl --user daemon-reload 2>/dev/null || true
   } >>"$SESSION_LOG" 2>&1 || true
+  [[ -L $HOME/.config ]] && readlink -f "$HOME/.config"
+  true
 }
 
 hook_block() {
   cat <<'EOF'
 # >>> kali-looks >>> (gives each login-screen look its own settings; remove with: looks sessions remove)
 if [ -x "$HOME/.local/bin/looks" ]; then
-  "$HOME/.local/bin/looks" session-hook "${DESKTOP_SESSION:-}" >/dev/null 2>&1 || true
+  _looks_cfg=$("$HOME/.local/bin/looks" session-hook "${DESKTOP_SESSION:-}" 2>/dev/null) || _looks_cfg=
+  if [ -n "$_looks_cfg" ] && [ -d "$_looks_cfg" ]; then export XDG_CONFIG_HOME="$_looks_cfg"; fi
+  unset _looks_cfg
 fi
 # <<< kali-looks <<<
 EOF
@@ -306,7 +312,7 @@ sandbox_env() { # prints KEY=VALUE lines
     "XDG_CURRENT_DESKTOP=KDE" "XDG_SESSION_DESKTOP=KDE" "KDE_FULL_SESSION=true" "KDE_SESSION_VERSION=6" \
     "DESKTOP_SESSION=kali-looks-$look" "LANG=$(session_lang)" \
     "PATH=$HOME/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" \
-    "USER=$USER" "LOGNAME=$USER" "SHELL=/bin/bash" "XDG_CONFIG_HOME=$h/.config"
+    "USER=$USER" "LOGNAME=$USER" "SHELL=/bin/bash" "XDG_CONFIG_HOME=$CFG_ROOT/$look"
 }
 
 sandbox_prepare() {
