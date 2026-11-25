@@ -1,0 +1,5 @@
+#!/bin/sh
+# Run through pkexec: records that the calling user just entered their password.
+u=$(id -nu "${PKEXEC_UID:?run through pkexec}") || exit 1
+mkdir -p /run/kali-looks-auth && chmod 755 /run/kali-looks-auth
+touch "/run/kali-looks-auth/$u"

@@ -1,0 +1,13 @@
+// kali-looks: once you've entered your password for `looks`, its admin prompts (and any
+// other pkexec prompt from your desktop) are skipped for the next 30 minutes.
+// Remove with: looks auth remove
+polkit.addRule(function (action, subject) {
+  if (action.id != "org.freedesktop.policykit.exec" || !subject.local || !subject.active)
+    return polkit.Result.NOT_HANDLED;
+  try {
+    polkit.spawn(["/usr/local/libexec/kali-looks-auth-window", subject.user]);
+    return polkit.Result.YES;
+  } catch (e) {
+    return polkit.Result.NOT_HANDLED;
+  }
+});

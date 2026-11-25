@@ -45,9 +45,16 @@ old = "   if path.is_symlink():links.add(str(path))"
 new = "   if path.is_symlink() and path not in {home/'.config',home/'.local',home/'.icons'}:links.add(str(path))  # kali-looks: top-level links to plain folders"
 assert s.count(old) == 1, "preflight check not found"
 p.write_text(s.replace(old, new))
+# Its build-dependency step turns every "deb" line into "deb-src" instead of adding one,
+# so on systems with one-line .list sources (Kali) no binary packages are left to install.
+d = p.parent / "dependencies.py"; t = d.read_text()
+old2 = "   else:text=re.sub(r'^(\\s*)deb\\s',r'\\1deb-src ',text,flags=re.M)"
+new2 = "   else:text=text+'\\n'+re.sub(r'^(\\s*)deb\\s',r'\\1deb-src ',text,flags=re.M)  # kali-looks: keep the binary lines"
+assert t.count(old2) == 1, "apt source rewrite not found"
+d.write_text(t.replace(old2, new2))
 # its self-check compares every file against SHA256SUMS.json
 m = p.parent / "SHA256SUMS.json"; sums = json.loads(m.read_text())
-sums[p.name] = hashlib.sha256(p.read_bytes()).hexdigest()
+for f in (p, d): sums[f.name] = hashlib.sha256(f.read_bytes()).hexdigest()
 m.write_text(json.dumps(sums, indent=2) + "\n")
 PY
 }

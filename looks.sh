@@ -9,6 +9,7 @@
 #   looks remove <look>            uninstall a look
 #   looks rebuild win7             rebuild Windows 7 after a Plasma update
 #   looks sessions remove          take the sessions off the login screen
+#   looks auth [remove]            one password covers 30 minutes of admin prompts
 #   looks sandbox <look> start|stop|shot NAME|run CMD   a hidden session, for testing
 #   looks help
 set -Eeuo pipefail
@@ -52,6 +53,7 @@ look_envs() {
 look_run() { local -a e; mapfile -t e < <(look_envs); env -i "${e[@]}" "$@"; }
 look_root() {
   local -a e; mapfile -t e < <(look_envs)
+  auth_window_open
   pkexec env "${e[@]}" SUDO_USER="$(id -un)" SUDO_UID="$(id -u)" SUDO_GID="$(id -g)" "$@"
 }
 
@@ -112,6 +114,31 @@ cmd_reset() {
   echo "  Run: looks setup $id"
 }
 
+# looks auth [remove]: one password covers 30 minutes of admin prompts
+cmd_auth() {
+  local script; script=$(mktemp)
+  case ${1:-install} in
+    install)
+      {
+        echo 'set -e'
+        echo "install -D -m 755 '$HERE/lib/root/kali-looks-auth-window' /usr/local/libexec/kali-looks-auth-window"
+        echo "install -D -m 755 '$HERE/lib/root/kali-looks-auth-open' /usr/local/libexec/kali-looks-auth-open"
+        echo "install -D -m 644 '$HERE/lib/root/49-kali-looks.rules' /etc/polkit-1/rules.d/49-kali-looks.rules"
+        echo "mkdir -p /run/kali-looks-auth && chmod 755 /run/kali-looks-auth && touch '/run/kali-looks-auth/$(id -un)'"
+      } > "$script"
+      pkexec bash "$script" || { rm -f "$script"; die "Couldn't set up the 30-minute window."; }
+      ok "One password now covers 30 minutes of admin prompts (undo: looks auth remove)." ;;
+    remove)
+      {
+        echo 'rm -f /etc/polkit-1/rules.d/49-kali-looks.rules /usr/local/libexec/kali-looks-auth-window /usr/local/libexec/kali-looks-auth-open'
+        echo 'rm -rf /run/kali-looks-auth'
+      } > "$script"
+      pkexec bash "$script" && ok "Back to a password for every admin step." ;;
+    *) die "usage: looks auth [remove]" ;;
+  esac
+  rm -f "$script"
+}
+
 cmd_install() {
   mkdir -p "$BIN_DIR"
   ln -sf "$HERE/looks.sh" "$BIN_DIR/looks"
@@ -120,7 +147,7 @@ cmd_install() {
   ok "Installed: $BIN_DIR/looks  (make sure $BIN_DIR is on your PATH)"
 }
 
-usage() { sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//'; }
 
 case "${1:-help}" in
   list|ls|status) cmd_list ;;
@@ -140,6 +167,7 @@ case "${1:-help}" in
       *) die "usage: looks sessions [install|remove]" ;;
     esac ;;
   switch) shift; cmd_switch "$@" ;;
+  auth) shift; cmd_auth "$@" ;;
   session-hook) cmd_session_hook "${2:-}" ;;
   sandbox) shift; cmd_sandbox "$@" ;;
   -h|--help|help) usage ;;

@@ -1,0 +1,7 @@
+#!/bin/sh
+# Exit 0 if <user> approved an admin step for kali-looks less than 30 minutes ago.
+# The stamp lives in /run (root-only, cleared at reboot).
+case $1 in ''|*[!a-z0-9_-]*) exit 1 ;; esac
+f="/run/kali-looks-auth/$1"
+[ -f "$f" ] || exit 1
+[ $(( $(date +%s) - $(stat -c %Y "$f") )) -lt 1800 ]

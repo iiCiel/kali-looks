@@ -27,7 +27,15 @@ warn() { printf '%s  !%s %s\n' "$C_YEL" "$C_OFF" "$*" >&2; }
 die()  { printf '%serror:%s %s\n' "$C_RED" "$C_OFF" "$*" >&2; exit 1; }
 
 # sudo needs a terminal for the password; without one (a launcher, a background job) use pkexec
-as_root() { if [[ $ROOT_CMD == pkexec || ! -t 0 ]]; then pkexec "$@"; else sudo "$@"; fi; }
+as_root() { auth_window_open; if [[ $ROOT_CMD == pkexec || ! -t 0 ]]; then pkexec "$@"; else sudo "$@"; fi; }
+
+# The 30-minute window (`looks auth`): one password, then no admin prompts for 30 minutes.
+AUTH_HELPER=/usr/local/libexec/kali-looks-auth-window
+auth_window_open() {
+  [[ -x $AUTH_HELPER ]] || return 0
+  "$AUTH_HELPER" "$(id -un)" 2>/dev/null && return 0
+  pkexec /usr/local/libexec/kali-looks-auth-open || true
+}
 
 state_get() { [[ -f $STATE ]] && sed -n "s/^$1=//p" "$STATE" | tail -n 1; }
 state_set() {
