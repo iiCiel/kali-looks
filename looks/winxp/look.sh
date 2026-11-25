@@ -38,12 +38,17 @@ xp_patch() {
   local be; be=$(xp_backend)
   grep -q 'kali-looks' "$be" && return 0
   python3 - "$be" <<'PY' || die "Couldn't adapt XPlasma Plus' installer to kali-looks."
-import sys
-p = sys.argv[1]; s = open(p).read()
+import hashlib, json, sys
+from pathlib import Path
+p = Path(sys.argv[1]); s = p.read_text()
 old = "   if path.is_symlink():links.add(str(path))"
 new = "   if path.is_symlink() and path not in {home/'.config',home/'.local',home/'.icons'}:links.add(str(path))  # kali-looks: top-level links to plain folders"
 assert s.count(old) == 1, "preflight check not found"
-open(p, 'w').write(s.replace(old, new))
+p.write_text(s.replace(old, new))
+# its self-check compares every file against SHA256SUMS.json
+m = p.parent / "SHA256SUMS.json"; sums = json.loads(m.read_text())
+sums[p.name] = hashlib.sha256(p.read_bytes()).hexdigest()
+m.write_text(json.dumps(sums, indent=2) + "\n")
 PY
 }
 
