@@ -233,6 +233,21 @@ look_apply() {
   log "Applying the macOS look ($variant)"
   plasma-apply-lookandfeel -a "$(mac_lnf_id "$variant")" --resetLayout >/dev/null 2>&1 \
     || die "Plasma refused the macOS global theme."
+  # Set each part explicitly too: the global-theme loader doesn't always reload them
+  if [[ $variant == dark ]]; then
+    plasma-apply-desktoptheme WhiteSur-dark >/dev/null 2>&1 || true
+    plasma-apply-colorscheme WhiteSurDark >/dev/null 2>&1 || true
+    kwriteconfig6 --file kwinrc --group org.kde.kdecoration2 --key theme __aurorae__svg__WhiteSur-dark
+    kwriteconfig6 --file kdeglobals --group KDE --key widgetStyle kvantum-dark
+  else
+    plasma-apply-desktoptheme WhiteSur >/dev/null 2>&1 || true
+    plasma-apply-colorscheme WhiteSur >/dev/null 2>&1 || true
+    kwriteconfig6 --file kwinrc --group org.kde.kdecoration2 --key theme __aurorae__svg__WhiteSur
+    kwriteconfig6 --file kdeglobals --group KDE --key widgetStyle kvantum
+  fi
+  kwriteconfig6 --file kwinrc --group org.kde.kdecoration2 --key library org.kde.kwin.aurorae
+  kwriteconfig6 --file kdeglobals --group Icons --key Theme WhiteSur
+  plasma-apply-cursortheme WhiteSur-cursors >/dev/null 2>&1 || true
   kwriteconfig6 --file "$CONF_HOME/Kvantum/kvantum.kvconfig" --group General --key theme \
     "$([[ $variant == dark ]] && echo WhiteSurDark || echo WhiteSur)"
   plasma-apply-wallpaperimage "$LOCAL_SHARE/backgrounds/kali-looks/$wp.jpg" >/dev/null 2>&1 || true
