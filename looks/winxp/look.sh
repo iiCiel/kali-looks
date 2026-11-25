@@ -28,10 +28,28 @@ look_prepare() {
   rm -rf "$XP_SRC"; mkdir -p "$XP_SRC"
   tar -xzf "$tgz" -C "$XP_SRC" || die "Couldn't unpack XPlasma Plus."
   [[ -n $(xp_backend) ]] || die "XPlasma Plus' installer wasn't where expected in the archive."
+  xp_patch
+}
+
+# XPlasma refuses to install when ~/.config, ~/.local or ~/.icons is a symlink (its
+# backups expect plain folders). With kali-looks ~/.config is a link to this look's own
+# folder, which is a plain folder, so let those three top-level links through.
+xp_patch() {
+  local be; be=$(xp_backend)
+  grep -q 'kali-looks' "$be" && return 0
+  python3 - "$be" <<'PY' || die "Couldn't adapt XPlasma Plus' installer to kali-looks."
+import sys
+p = sys.argv[1]; s = open(p).read()
+old = "   if path.is_symlink():links.add(str(path))"
+new = "   if path.is_symlink() and path not in {home/'.config',home/'.local',home/'.icons'}:links.add(str(path))  # kali-looks: top-level links to plain folders"
+assert s.count(old) == 1, "preflight check not found"
+open(p, 'w').write(s.replace(old, new))
+PY
 }
 
 look_setup() {
   local be; be=$(xp_backend)
+  xp_patch
   log "Installing Windows XP into its session (asks for your password; compiling takes ~10 minutes)"
   ( cd "$(dirname "$be")" && look_run python3 "$be" install --features="$XP_FEATURES" --theme 'Luna Blue' --tweaks= ) \
     2>&1 | tee "$DATA_DIR/winxp-install.log"
