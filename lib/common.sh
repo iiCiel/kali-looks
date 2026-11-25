@@ -10,6 +10,9 @@ STATE="$DATA_DIR/state"           # not in ~/.config: that folder changes with t
 BIN_DIR="$HOME/.local/bin"
 LOCAL_SHARE="${XDG_DATA_HOME:-$HOME/.local/share}"
 
+# Shells started outside the desktop (ssh, some tools) may lack these.
+if [[ -z ${XDG_RUNTIME_DIR:-} && -d /run/user/$(id -u) ]]; then export XDG_RUNTIME_DIR="/run/user/$(id -u)"; fi
+
 # Root commands run through this: sudo by default, LOOKS_ROOT=pkexec for a graphical prompt.
 ROOT_CMD="${LOOKS_ROOT:-sudo}"
 
