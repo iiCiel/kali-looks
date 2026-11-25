@@ -14,7 +14,7 @@ XP_SHA256="e222821f67091a0362ba91384cb9c2fc77ee854dc0a6dcfe7def43b27345f8fc"
 XP_SRC="$SRC_DIR/xplasma-plus-$XP_VERSION"
 XP_FEATURES="theme_manager,desktop,apps,fonts,taskbar,icons,pointers,sounds,wallpaper,behavior,caption_animation,desktop_icons,session,welcome_splash,lock"
 
-xp_backend() { find "$XP_SRC" -maxdepth 3 -name backend.py -path '*installer*' | head -1; }
+xp_backend() { find "$XP_SRC" -maxdepth 2 -name backend.py | head -1; }
 
 look_prepare() {
   need_packages pkexec python3
