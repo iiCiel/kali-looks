@@ -31,6 +31,11 @@ look_setup() {
     || die "The macOS installer failed; see $DATA_DIR/macos-install.log"
   grep -q 'mac-tahoe\|mac\.tahoe' "$LOOK_CFG/plasma-org.kde.plasma.desktop-appletsrc" 2>/dev/null \
     || die "The macOS layout didn't land in this look's settings; see $DATA_DIR/macos-install.log"
+  # Desktop icons line up down the right edge, as on a Mac
+  look_run qdbus6 org.kde.plasmashell /PlasmaShell org.kde.PlasmaShell.evaluateScript "
+    desktops().forEach(function (d) {
+      d.currentConfigGroup = ['General']; d.writeConfig('arrangement', 1); d.writeConfig('alignment', 1); d.reloadConfig();
+    });" >/dev/null || warn "Couldn't arrange the desktop icons"
 }
 
 look_remove() {
