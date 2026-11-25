@@ -14,6 +14,10 @@ looks apply win7            # builds it the first time, then log out and back in
 looks revert                # your own desktop back, exactly as it was
 ```
 
+| macOS | Windows XP | Windows 7 |
+|---|---|---|
+| ![macOS look on Plasma](screenshots/macos.jpg) | ![Windows XP look on Plasma](screenshots/winxp.jpg) | ![Windows 7 look (AeroThemePlasma)](screenshots/win7.jpg) |
+
 Run `looks apply macos` / `winxp` from a terminal inside a Plasma session: the switch happens live. Using Xfce? See [cupertino-xfce](https://github.com/iiCiel/cupertino-xfce) for the macOS look there.
 
 ## The looks
