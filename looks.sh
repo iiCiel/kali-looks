@@ -1,22 +1,21 @@
 #!/usr/bin/env bash
-# looks: switch KDE Plasma between whole-desktop looks (macOS, Windows XP, Windows 7).
+# looks: whole-desktop looks for Kali, each its own login-screen session.
 #
-#   looks list                     show the looks and which one is active
-#   looks apply <look> [variant]   e.g. looks apply macos dark | looks apply winxp
-#   looks revert                   put your desktop back the way it was
+#   looks list                     the looks, and which are set up
+#   looks setup <look>             install or update a look (macos, winxp, win7)
+#   looks sessions                 put the set-up looks on the login screen
+#   looks switch [look]            log out and come back as another look ("base" = Xfce)
+#   looks reset <look>             start a look's settings over from scratch
+#   looks remove <look>            uninstall a look
 #   looks rebuild win7             rebuild Windows 7 after a Plasma update
-#   looks remove win7              uninstall AeroThemePlasma completely
-#   looks sessions                 add each look to the login screen's session menu
-#   looks sessions remove          take them off again
-#   looks install                  install the `looks` command into ~/.local/bin
+#   looks sessions remove          take the sessions off the login screen
+#   looks sandbox <look> start|stop|shot NAME|run CMD   a hidden session, for testing
 #   looks help
 set -Eeuo pipefail
 
 HERE="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
 # shellcheck source=lib/common.sh
 source "$HERE/lib/common.sh"
-# shellcheck source=lib/snapshot.sh
-source "$HERE/lib/snapshot.sh"
 # shellcheck source=lib/sessions.sh
 source "$HERE/lib/sessions.sh"
 
@@ -26,86 +25,112 @@ load_look() {
   local id=$1
   LOOK_DIR="$HERE/looks/$id"
   [[ -f $LOOK_DIR/look.sh ]] || die "Unknown look '$id'. Try: looks list"
-  export LOOK_ID=$id
+  LOOK_ID=$id
+  LOOK_CFG="$CFG_ROOT/$id"
+  export LOOK_ID LOOK_CFG
   # shellcheck source=/dev/null
   source "$LOOK_DIR/look.sh"
 }
 
-# Undo the running parts of the current look (its dock, autostart entries) before
-# another look takes over. Config files are simply overwritten by the next look.
-leave_current() {
-  local cur; cur=$(state_get LOOK || true)
-  [[ -n $cur && -d $HERE/looks/$cur ]] || return 0
-  ( load_look "$cur"; if declare -F look_leave >/dev/null; then look_leave; fi )
+# ---- running things inside the look's own session --------------------------------
+# During setup, commands run either in the look's real session (if you're logged into
+# it) or in a hidden one. look_run runs as you; look_root as root with the same session.
+
+SETUP_MODE=""
+look_envs() {
+  if [[ $SETUP_MODE == sandbox ]]; then
+    sandbox_env "$LOOK_ID"; echo "DBUS_SESSION_BUS_ADDRESS=$(sandbox_bus "$LOOK_ID")"
+  else
+    local k; for k in HOME DISPLAY XAUTHORITY XDG_RUNTIME_DIR XDG_SESSION_TYPE XDG_CURRENT_DESKTOP \
+      XDG_SESSION_DESKTOP KDE_FULL_SESSION KDE_SESSION_VERSION DESKTOP_SESSION LANG PATH USER LOGNAME \
+      DBUS_SESSION_BUS_ADDRESS XDG_CONFIG_DIRS XDG_DATA_DIRS; do
+      [[ -n ${!k:-} ]] && echo "$k=${!k}"
+    done
+    echo "XDG_CONFIG_HOME=$HOME/.config"
+  fi
+}
+look_run() { local -a e; mapfile -t e < <(look_envs); env -i "${e[@]}" "$@"; }
+look_root() {
+  local -a e; mapfile -t e < <(look_envs)
+  pkexec env "${e[@]}" SUDO_USER="$(id -un)" SUDO_UID="$(id -u)" SUDO_GID="$(id -g)" "$@"
 }
 
+# ---- commands ---------------------------------------------------------------------
+
+look_ready() { [[ -e $CFG_ROOT/$1/.ready ]]; }
+
 cmd_list() {
-  local cur id variant title; cur=$(state_get LOOK || true); variant=$(state_get VARIANT || true)
+  local id title cur state
+  cur=$(current_look)
   echo "Looks:"
   for id in $(all_looks); do
     title=$( (load_look "$id"; echo "$LOOK_TITLE") )
-    if [[ $id == "$cur" ]]; then
-      printf '  %s* %-8s%s %s (active%s)\n' "$C_GRN" "$id" "$C_OFF" "$title" "${variant:+, $variant}"
-    else
-      printf '    %-8s %s\n' "$id" "$title"
-    fi
+    if look_ready "$id"; then state="${C_GRN}set up${C_OFF}"; else state="${C_DIM}not set up: looks setup $id${C_OFF}"; fi
+    printf '  %s %-6s %-14s %s\n' "$([[ $id == "$cur" ]] && echo "*" || echo " ")" "$id" "$title" "$state"
   done
-  [[ -n $cur ]] || echo "  (none active: Plasma's own look)"
+  [[ $cur == base ]] && echo "  (you're in your own Kali desktop)"
+  true
 }
 
-cmd_apply() {
-  local id=${1:-} variant=${2:-}
+cmd_setup() {
+  local id=${1:-}
   [[ -n $id ]] || die "Which look? Try: looks list"
   load_look "$id"
-  [[ -n $variant ]] || variant=${LOOK_VARIANTS[0]:-default}
-  if [[ ${#LOOK_VARIANTS[@]} -gt 0 ]] && ! printf '%s\n' "${LOOK_VARIANTS[@]}" | grep -qxF -- "$variant"; then
-    die "$LOOK_TITLE has no '$variant' variant (try: ${LOOK_VARIANTS[*]})"
-  fi
-  if [[ -z $LOOK_SESSION ]] && ! in_plasma; then
-    die "Run this inside a KDE Plasma session (log in to Plasma, then run it from a terminal)."
-  fi
-  mkdir -p "$DATA_DIR" "$CONF_DIR" "$SRC_DIR"
-  snapshot_original
+  mkdir -p "$DATA_DIR" "$SRC_DIR" "$DL_DIR"
+  need_packages xvfb imagemagick pkexec git curl
+  ensure_config_link || die "Couldn't turn ~/.config into a link (see above)."
+  sync_look_config "$id"
   look_prepare
-  leave_current
-  load_look "$id"
-  look_apply "$variant"
-  state_set LOOK "$id"
-  state_set VARIANT "$variant"
+  if [[ $(current_look) == "$id" ]] && pgrep -u "$(id -u)" -x plasmashell >/dev/null; then
+    SETUP_MODE=live
+  else
+    SETUP_MODE=sandbox
+    log "Starting a hidden $LOOK_TITLE session to set it up in (your screen isn't touched)"
+    cmd_sandbox "$id" start
+    trap 'cmd_sandbox "$LOOK_ID" stop >/dev/null 2>&1 || true' EXIT
+  fi
+  look_setup
+  touch "$LOOK_CFG/.ready"
+  if [[ $SETUP_MODE == sandbox ]]; then cmd_sandbox "$id" stop >/dev/null; trap - EXIT; fi
+  ok "$LOOK_TITLE is set up."
+  if grep -q '^# >>> kali-looks >>>' "$XSESSIONRC" 2>/dev/null; then cmd_sessions_install; else
+    echo "  Next: looks sessions   (puts it on the login screen)"; fi
 }
 
-cmd_revert() {
-  leave_current
-  log "Restoring your desktop as it was before the first look"
-  restore_original
-  local orig_lnf
-  orig_lnf=$(kreadconfig6 --file kdeglobals --group KDE --key LookAndFeelPackage 2>/dev/null || true)
-  if in_plasma; then
-    restart_plasmashell
-    reconfigure_kwin
+cmd_reset() {
+  local id=${1:-}
+  [[ -n $id ]] || die "Which look?"
+  load_look "$id"
+  [[ $(current_look) != "$id" ]] || die "You're logged into $LOOK_TITLE; switch to another session first."
+  if [[ -d $LOOK_CFG ]]; then
+    local bk; bk="$DATA_DIR/backup/$id-$(date +%Y%m%d-%H%M%S)"
+    mkdir -p "$DATA_DIR/backup"; mv -T "$LOOK_CFG" "$bk"
+    ok "Old $LOOK_TITLE settings moved to $bk"
   fi
-  state_set LOOK ""
-  state_set VARIANT ""
-  ok "Back to your own desktop${orig_lnf:+ ($orig_lnf)}. Log out and back in to reset everything."
+  sync_look_config "$id"
+  if declare -F look_after_reset >/dev/null; then look_after_reset; fi
+  echo "  Run: looks setup $id"
 }
 
 cmd_install() {
   mkdir -p "$BIN_DIR"
   ln -sf "$HERE/looks.sh" "$BIN_DIR/looks"
+  # 0.1 kept its state in ~/.config/kali-looks
+  [[ -f $STATE || ! -f $HOME/.config/kali-looks/state ]] || { mkdir -p "$DATA_DIR"; cp "$HOME/.config/kali-looks/state" "$STATE"; }
   ok "Installed: $BIN_DIR/looks  (make sure $BIN_DIR is on your PATH)"
 }
 
-usage() { sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'; }
 
 case "${1:-help}" in
-  list|ls) cmd_list ;;
-  apply|use) shift; cmd_apply "$@" ;;
-  revert|reset) cmd_revert ;;
+  list|ls|status) cmd_list ;;
+  setup|apply) shift; cmd_setup "$@" ;;
+  reset) shift; cmd_reset "$@" ;;
   rebuild|remove)
     [[ -n ${2:-} ]] || die "Which look? e.g. looks $1 win7"
     load_look "$2"
     declare -F "look_$1" >/dev/null || die "$LOOK_TITLE has nothing to $1."
-    mkdir -p "$DATA_DIR" "$CONF_DIR" "$SRC_DIR"
+    mkdir -p "$DATA_DIR" "$SRC_DIR"
     "look_$1" ;;
   install) cmd_install ;;
   sessions)
@@ -114,9 +139,9 @@ case "${1:-help}" in
       remove|uninstall) cmd_sessions_remove ;;
       *) die "usage: looks sessions [install|remove]" ;;
     esac ;;
+  switch) shift; cmd_switch "$@" ;;
   session-hook) cmd_session_hook "${2:-}" ;;
-  firstrun) [[ -n ${2:-} ]] || die "usage: looks firstrun <look>"; cmd_firstrun "$2" ;;
-  status) echo "$(state_get LOOK || true) $(state_get VARIANT || true)" ;;
+  sandbox) shift; cmd_sandbox "$@" ;;
   -h|--help|help) usage ;;
   --version) echo "looks $LOOKS_VERSION" ;;
   *) usage; exit 2 ;;

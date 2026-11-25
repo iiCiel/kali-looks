@@ -1,117 +1,50 @@
 # shellcheck shell=bash
 # shellcheck disable=SC2034  # LOOK_* are read by the looks command
-# Windows XP look for KDE Plasma 6: "Expose" Luna theme (Plasma theme, window borders,
-# Qt style, colours, wallpaper) by phob1an, B00merang's Windows XP Luna for GTK apps,
-# and a blue taskbar with a green start button on every screen.
+# Windows XP: XPlasma Plus (https://github.com/ergosteur/XPlasma-Plus, GPL-3.0; a fork of
+# hotsocket's XPlasma, https://tangled.org/hotsocket.fyi/xplasma). It renders XP's real
+# Luna visual style: taskbar, Start menu, tray, window borders, Qt and GTK controls,
+# fonts, icons, pointers, sounds, Bliss, logout and lock screens.
+# Its installer runs inside this look's session, so everything it changes stays there.
+# Left out: its login screen (SDDM; Kali uses LightDM), boot splash and the IE6 Firefox.
 
 LOOK_TITLE="Windows XP"
-LOOK_VARIANTS=(luna)
-LOOK_SESSION=""
+XP_VERSION="1.0.4-beta.2"
+XP_URL="https://github.com/ergosteur/XPlasma-Plus/releases/download/v$XP_VERSION/xplasma-plus-$XP_VERSION-installer-generic.tar.gz"
+XP_SHA256="e222821f67091a0362ba91384cb9c2fc77ee854dc0a6dcfe7def43b27345f8fc"
+XP_SRC="$SRC_DIR/xplasma-plus-$XP_VERSION"
+XP_FEATURES="theme_manager,desktop,apps,fonts,taskbar,icons,pointers,sounds,wallpaper,behavior,caption_animation,desktop_icons,session,welcome_splash,lock"
 
-# Pinned upstreams
-EXPOSE_URL="https://www.opencode.net/phob1an/expose.git"
-EXPOSE_COMMIT="09d4ddb30a345cb35f638219bd792296dfbf01f2"
-XP_GTK_URL="https://github.com/B00merang-Project/Windows-XP.git"
-XP_GTK_COMMIT="7637830906823af40a3cd7e7079be753d8b7d679"
-
-XP_LNF_ID="io.github.iiciel.looks.winxp"
-XP_GTK_THEME="Windows XP Luna"
+xp_backend() { find "$XP_SRC" -maxdepth 3 -name backend.py -path '*installer*' | head -1; }
 
 look_prepare() {
-  need_packages git qt-style-kvantum fonts-dejavu-core
-  log "Fetching the Expose (XP Luna) theme and Windows XP for GTK apps"
-  fetch_repo expose "$EXPOSE_URL" "$EXPOSE_COMMIT"
-  fetch_repo Windows-XP "$XP_GTK_URL" "$XP_GTK_COMMIT"
-
-  local E="$SRC_DIR/expose"
-  mkdir -p "$CONF_HOME/Kvantum" "$LOCAL_SHARE"/{color-schemes,aurorae/themes,plasma/desktoptheme,wallpapers}
-  rm -rf "$LOCAL_SHARE/plasma/desktoptheme/expose" "$LOCAL_SHARE/aurorae/themes/expose" "$CONF_HOME/Kvantum/Expose"
-  cp -r "$E/desktoptheme/expose" "$LOCAL_SHARE/plasma/desktoptheme/"
-  cp -r "$E/themes/expose" "$LOCAL_SHARE/aurorae/themes/"
-  cp -r "$E/Kvantum/Expose" "$CONF_HOME/Kvantum/"
-  cp "$E/Expose.colors" "$LOCAL_SHARE/color-schemes/"
-  rm -rf "$LOCAL_SHARE/wallpapers/Bløff"; cp -r "$E/wallpapers/Bløff" "$LOCAL_SHARE/wallpapers/"
-
-  # GTK apps (Firefox etc.)
-  mkdir -p "$HOME/.themes"
-  rm -rf "${HOME:?}/.themes/$XP_GTK_THEME"
-  cp -r "$SRC_DIR/Windows-XP/$XP_GTK_THEME" "$HOME/.themes/"
-
-  # The start button image and our Plasma global theme
-  mkdir -p "$DATA_DIR"
-  cp "$LOOK_DIR/start-button.png" "$DATA_DIR/xp-start-button.png"
-  local dir="$LOCAL_SHARE/plasma/look-and-feel/$XP_LNF_ID"
-  rm -rf "$dir"; mkdir -p "$dir/contents/layouts"
-  cat > "$dir/metadata.json" <<EOF
-{
-  "KPackageStructure": "Plasma/LookAndFeel",
-  "KPlugin": {
-    "Authors": [{ "Name": "kali-looks" }],
-    "Category": "Global Themes (Plasma 6)",
-    "Description": "Windows XP-style taskbar on every screen with the Expose Luna theme",
-    "Id": "$XP_LNF_ID",
-    "License": "GPLv3",
-    "Name": "Windows XP (kali-looks)",
-    "Website": "https://github.com/iiCiel/kali-looks"
-  },
-  "X-KDE-fallbackPackage": "org.kde.breeze.desktop",
-  "X-Plasma-APIVersion": "2"
-}
-EOF
-  cat > "$dir/contents/defaults" <<'EOF'
-[kdeglobals][General]
-ColorScheme=Expose
-
-[kdeglobals][KDE]
-widgetStyle=kvantum
-
-[kwinrc][org.kde.kdecoration2]
-library=org.kde.kwin.aurorae
-theme=__aurorae__svg__expose
-
-[plasmarc][Theme]
-name=expose
-EOF
-  { echo "var LOOKS_START_IMAGE = \"$DATA_DIR/xp-start-button.png\";"; cat "$LOOK_DIR/layout.js"; } \
-    > "$dir/contents/layouts/org.kde.plasma.desktop-layout.js"
-  ok "Windows XP look ready"
+  need_packages pkexec python3
+  [[ -n $(xp_backend) ]] && return 0
+  local tgz="$DL_DIR/${XP_URL##*/}"
+  if ! sha_ok "$tgz" "$XP_SHA256" 2>/dev/null; then
+    log "Downloading XPlasma Plus $XP_VERSION (about 500 MB)"
+    curl -fL --retry 3 -o "$tgz" "$XP_URL" || die "Couldn't download XPlasma Plus."
+    sha_ok "$tgz" "$XP_SHA256" || die "The XPlasma Plus download doesn't match its published checksum."
+  fi
+  rm -rf "$XP_SRC"; mkdir -p "$XP_SRC"
+  tar -xzf "$tgz" -C "$XP_SRC" || die "Couldn't unpack XPlasma Plus."
+  [[ -n $(xp_backend) ]] || die "XPlasma Plus' installer wasn't where expected in the archive."
 }
 
-look_apply() {
-  log "Applying the Windows XP look"
-  plasma-apply-lookandfeel -a "$XP_LNF_ID" --resetLayout >/dev/null 2>&1 \
-    || die "Plasma refused the Windows XP global theme."
-  # Set each part explicitly too: the global-theme loader doesn't always reload them
-  plasma-apply-desktoptheme expose >/dev/null 2>&1 || true
-  plasma-apply-colorscheme Expose >/dev/null 2>&1 || true
-  kwriteconfig6 --file kwinrc --group org.kde.kdecoration2 --key library org.kde.kwin.aurorae
-  kwriteconfig6 --file kwinrc --group org.kde.kdecoration2 --key theme __aurorae__svg__expose
-  kwriteconfig6 --file kwinrc --group org.kde.kdecoration2 --key ButtonsOnLeft "M"
-  kwriteconfig6 --file kwinrc --group org.kde.kdecoration2 --key ButtonsOnRight "IAX"
-  kwriteconfig6 --file kdeglobals --group KDE --key widgetStyle kvantum
-  kwriteconfig6 --file "$CONF_HOME/Kvantum/kvantum.kvconfig" --group General --key theme Expose
-  # No XP icon set ships with it: use your own icons and cursor, not the previous look's
-  local icons="" cursor=""
-  local f
-  for f in "$ORIG_DIR/config/kdeglobals" "$ORIG_DIR/config/kdedefaults/kdeglobals"; do
-    [[ -n ${icons:-} || ! -f $f ]] || icons=$(kreadconfig6 --file "$f" --group Icons --key Theme 2>/dev/null || true)
-  done
-  for f in "$ORIG_DIR/config/kcminputrc" "$ORIG_DIR/config/kdedefaults/kcminputrc"; do
-    [[ -n ${cursor:-} || ! -f $f ]] || cursor=$(kreadconfig6 --file "$f" --group Mouse --key cursorTheme 2>/dev/null || true)
-  done
-  kwriteconfig6 --file kdeglobals --group Icons --key Theme "${icons:-breeze}"
-  plasma-apply-cursortheme "${cursor:-breeze_cursors}" >/dev/null 2>&1 || true
-  local wp; wp=$(find "$LOCAL_SHARE/wallpapers/Bløff" -name '*.png' -o -name '*.jpg' | sort | tail -n 1)
-  [[ -n $wp ]] && plasma-apply-wallpaperimage "$wp" >/dev/null 2>&1 || true
+look_setup() {
+  local be; be=$(xp_backend)
+  log "Installing Windows XP into its session (asks for your password; compiling takes ~10 minutes)"
+  ( cd "$(dirname "$be")" && look_run python3 "$be" install --features="$XP_FEATURES" --theme 'Luna Blue' --tweaks= ) \
+    2>&1 | tee "$DATA_DIR/winxp-install.log"
+  [[ ${PIPESTATUS[0]} -eq 0 ]] || die "The XP installer failed; see $DATA_DIR/winxp-install.log"
+}
 
-  # GTK apps and fonts (Tahoma-like: DejaVu Sans at XP's small size)
-  kwriteconfig6 --file "$CONF_HOME/gtk-3.0/settings.ini" --group Settings --key gtk-theme-name "$XP_GTK_THEME"
-  kwriteconfig6 --file "$CONF_HOME/gtk-4.0/settings.ini" --group Settings --key gtk-theme-name "$XP_GTK_THEME"
-  qdbus org.kde.GtkConfig /GtkConfig org.kde.GtkConfig.setGtkTheme "$XP_GTK_THEME" >/dev/null 2>&1 || true
-  kwriteconfig6 --file kdeglobals --group General --key font "DejaVu Sans,9,-1,5,400,0,0,0,0,0,0,0,0,0,0,1"
-  kwriteconfig6 --file kdeglobals --group General --key menuFont "DejaVu Sans,9,-1,5,400,0,0,0,0,0,0,0,0,0,0,1"
-  kwriteconfig6 --file kdeglobals --group General --key toolBarFont "DejaVu Sans,8,-1,5,400,0,0,0,0,0,0,0,0,0,0,1"
-  kwriteconfig6 --file kdeglobals --group WM --key activeFont "DejaVu Sans,10,-1,5,700,0,0,0,0,0,0,0,0,0,0,1"
-  reconfigure_kwin
-  ok "Windows XP look applied."
+look_remove() {
+  local be; be=$(xp_backend)
+  [[ -n $be ]] || { ok "Windows XP isn't installed."; return 0; }
+  log "Removing Windows XP (asks for your password)"
+  SETUP_MODE=sandbox; cmd_sandbox winxp start
+  ( cd "$(dirname "$be")" && look_run python3 "$be" uninstall ) || warn "Its uninstaller reported a problem."
+  cmd_sandbox winxp stop
+  rm -f "$LOOK_CFG/.ready"
+  ok "Removed."
 }

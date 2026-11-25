@@ -1,16 +1,14 @@
 # shellcheck shell=bash
 # shellcheck disable=SC2034  # LOOK_* are read by the looks command
-# Windows 7 look: AeroThemePlasma (https://github.com/aeroshell-desktop/aerothemeplasma),
-# built from source at pinned versions. It is a separate login session, so "applying"
-# it means building it once and then choosing "AeroThemePlasma" at the login screen.
+# Windows 7: AeroThemePlasma (https://github.com/aeroshell-desktop/aerothemeplasma, AGPL-3.0),
+# built from source at pinned versions. Its session (startatp) runs its own first-login
+# setup in this look's fresh config tree.
 #
 # Heads-up: it installs its own build of Plasma's libplasma over the system one. A Kali
 # update that upgrades libplasma replaces it again and the Windows 7 session needs a
 # rebuild: `looks rebuild win7`. `looks remove win7` undoes everything.
 
-LOOK_TITLE="Windows 7 (AeroThemePlasma)"
-LOOK_VARIANTS=(aero)
-LOOK_SESSION="aerothemeplasma"   # chosen at the login screen
+LOOK_TITLE="Windows 7"
 
 # Pinned upstreams: "<dir> <url> <commit>"
 W7_BRANCH="Plasma/6.7"
@@ -113,7 +111,7 @@ echo "==> Done"
 EOF
 }
 
-look_prepare() {
+w7_build() {
   if w7_installed; then
     local built cur
     built=$(cat "$W7_MANIFESTS/libplasma-version" 2>/dev/null || true)
@@ -147,40 +145,22 @@ look_prepare() {
   ok "AeroThemePlasma installed"
 }
 
-w7_session_name() {
-  local f
-  for f in /usr/share/xsessions/*.desktop /usr/share/wayland-sessions/*.desktop; do
-    grep -qi -E 'aero' "$f" 2>/dev/null && { basename "$f" .desktop; return 0; }
-  done
-  return 1
-}
+look_prepare() { w7_build; }
 
-look_apply() {
-  local session user_path
-  session=$(w7_session_name) || die "AeroThemePlasma's login session wasn't found after installing."
-  # Make it the session for the next login (the login screen remembers the choice)
-  user_path="/org/freedesktop/Accounts/User$(id -u)"
-  if busctl call org.freedesktop.Accounts "$user_path" org.freedesktop.Accounts.User SetXSession s "$session" 2>/dev/null; then
-    ok "Next login starts the Windows 7 session ($session)."
-  else
-    warn "Couldn't preselect it: choose \"$session\" in the session menu at the login screen."
-  fi
-  echo "  Log out to switch. To come back, pick Plasma (or Xfce) at the login screen."
-}
-
-look_leave() {
-  # Switching to another look from inside Plasma: just make the next login normal Plasma again.
-  local s user_path
-  user_path="/org/freedesktop/Accounts/User$(id -u)"
-  for s in plasmax11 plasma; do
-    [[ -f /usr/share/xsessions/$s.desktop || -f /usr/share/wayland-sessions/$s.desktop ]] || continue
-    busctl call org.freedesktop.Accounts "$user_path" org.freedesktop.Accounts.User SetXSession s "$s" 2>/dev/null || true
-    break
+# First login: AeroThemePlasma's own setup runs in the fresh session. Do it now in the
+# hidden session so the real first login is already finished.
+w7_setup() {
+  local i
+  for i in $(seq 90); do
+    [[ -n $(kreadconfig6 --file "$LOOK_CFG/kdeglobals" --group KDE --key LookAndFeelPackage 2>/dev/null) ]] && break
+    sleep 2
   done
 }
+
+look_setup() { w7_setup; }
 
 # looks rebuild win7
-look_rebuild() { rm -f "$W7_MANIFESTS/libplasma-version"; look_prepare; }
+look_rebuild() { rm -f "$W7_MANIFESTS/libplasma-version"; w7_build; }
 
 # looks remove win7: delete what was installed and put Kali's own packages back
 look_remove() {
@@ -208,6 +188,6 @@ EOF
   log "Removing AeroThemePlasma ($(wc -l < "$man") files) and reinstalling: $(tr '\n' ' ' < "$pk")(asks for your password)"
   as_root bash "$script" || die "Removing failed."
   rm -rf "$W7_MANIFESTS"
-  look_leave
+  rm -f "$LOOK_CFG/.ready"
   ok "AeroThemePlasma removed. Log out and back in."
 }

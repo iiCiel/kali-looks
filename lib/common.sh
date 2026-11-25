@@ -2,13 +2,11 @@
 # Shared helpers for the `looks` command and each look's look.sh.
 # shellcheck disable=SC2034  # paths are used by the scripts that source this file
 
-LOOKS_VERSION="0.1.0"
+LOOKS_VERSION="0.2.0"
 DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/kali-looks"
-CONF_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
-CONF_DIR="$CONF_HOME/kali-looks"
 SRC_DIR="$DATA_DIR/src"           # pinned upstream sources
-ORIG_DIR="$DATA_DIR/original"     # the desktop as it was before the first look
-STATE="$CONF_DIR/state"
+DL_DIR="$DATA_DIR/downloads"      # release archives, checked by SHA-256
+STATE="$DATA_DIR/state"           # not in ~/.config: that folder changes with the session
 BIN_DIR="$HOME/.local/bin"
 LOCAL_SHARE="${XDG_DATA_HOME:-$HOME/.local/share}"
 
