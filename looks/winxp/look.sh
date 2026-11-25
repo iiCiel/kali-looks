@@ -31,34 +31,10 @@ look_prepare() {
   xp_patch
 }
 
-# XPlasma refuses to install when ~/.config, ~/.local or ~/.icons is a symlink (its
-# backups expect plain folders). With kali-looks ~/.config is a link to this look's own
-# folder, which is a plain folder, so let those three top-level links through.
+# kali-looks' small fixes to the unpacked installer (see patch-xplasma.py).
 xp_patch() {
-  local be; be=$(xp_backend)
-  grep -q 'kali-looks' "$be" && grep -q 'kali-looks' "$(dirname "$be")/dependencies.py" && return 0
-  python3 - "$be" <<'PY' || die "Couldn't adapt XPlasma Plus' installer to kali-looks."
-import hashlib, json, sys
-from pathlib import Path
-p = Path(sys.argv[1]); s = p.read_text()
-old = "   if path.is_symlink():links.add(str(path))"
-new = "   if path.is_symlink() and path not in {home/'.config',home/'.local',home/'.icons'}:links.add(str(path))  # kali-looks: top-level links to plain folders"
-if "kali-looks" not in s:
-    assert s.count(old) == 1, "preflight check not found"
-    p.write_text(s.replace(old, new))
-# Its build-dependency step turns every "deb" line into "deb-src" instead of adding one,
-# so on systems with one-line .list sources (Kali) no binary packages are left to install.
-d = p.parent / "dependencies.py"; t = d.read_text()
-old2 = "   else:text=re.sub(r'^(\\s*)deb\\s',r'\\1deb-src ',text,flags=re.M)"
-new2 = "   else:text=text+'\\n'+re.sub(r'^(\\s*)deb\\s',r'\\1deb-src ',text,flags=re.M)  # kali-looks: keep the binary lines"
-if "kali-looks" not in t:
-    assert t.count(old2) == 1, "apt source rewrite not found"
-    d.write_text(t.replace(old2, new2))
-# its self-check compares every file against SHA256SUMS.json
-m = p.parent / "SHA256SUMS.json"; sums = json.loads(m.read_text())
-for f in (p, d): sums[f.name] = hashlib.sha256(f.read_bytes()).hexdigest()
-m.write_text(json.dumps(sums, indent=2) + "\n")
-PY
+  python3 "$LOOK_DIR/patch-xplasma.py" "$(dirname "$(xp_backend)")" \
+    || die "Couldn't adapt XPlasma Plus' installer to kali-looks."
 }
 
 look_setup() {
