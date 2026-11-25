@@ -26,7 +26,8 @@ ok()   { printf '%s  ✓%s %s\n' "$C_GRN" "$C_OFF" "$*"; }
 warn() { printf '%s  !%s %s\n' "$C_YEL" "$C_OFF" "$*" >&2; }
 die()  { printf '%serror:%s %s\n' "$C_RED" "$C_OFF" "$*" >&2; exit 1; }
 
-as_root() { if [[ $ROOT_CMD == pkexec ]]; then pkexec "$@"; else sudo "$@"; fi; }
+# sudo needs a terminal for the password; without one (a launcher, a background job) use pkexec
+as_root() { if [[ $ROOT_CMD == pkexec || ! -t 0 ]]; then pkexec "$@"; else sudo "$@"; fi; }
 
 state_get() { [[ -f $STATE ]] && sed -n "s/^$1=//p" "$STATE" | tail -n 1; }
 state_set() {
