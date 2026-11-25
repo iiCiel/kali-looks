@@ -305,8 +305,6 @@ session_lang() {
   echo "${l:-C.UTF-8}"
 }
 
-# XDG_SESSION_ID names no real login session, so the hidden session's screen locker
-# doesn't follow your real one (it would lock whenever your screen does).
 sandbox_env() { # prints KEY=VALUE lines
   local look=$1 h rt d
   h=$(sandbox_home "$look"); rt=$(sandbox_runtime "$look"); d=$(sandbox_display "$look")
@@ -314,8 +312,7 @@ sandbox_env() { # prints KEY=VALUE lines
     "XDG_CURRENT_DESKTOP=KDE" "XDG_SESSION_DESKTOP=KDE" "KDE_FULL_SESSION=true" "KDE_SESSION_VERSION=6" \
     "DESKTOP_SESSION=kali-looks-$look" "LANG=$(session_lang)" \
     "PATH=$HERE/lib/sandbox-bin:$HOME/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" \
-    "USER=$USER" "LOGNAME=$USER" "SHELL=/bin/bash" "XDG_CONFIG_HOME=$CFG_ROOT/$look" \
-    "XDG_SESSION_ID=kali-looks-sandbox"
+    "USER=$USER" "LOGNAME=$USER" "SHELL=/bin/bash" "XDG_CONFIG_HOME=$CFG_ROOT/$look"
 }
 
 sandbox_prepare() {
@@ -364,6 +361,11 @@ cmd_sandbox() {
       if systemd-run --user --scope --quiet true 2>/dev/null; then
         scope=(systemd-run --user --scope --quiet --collect --unit="kali-looks-sandbox-$look-$$")
       fi
+      # The desktop gets a stand-in system bus without logind: otherwise its screen
+      # locker follows your real session's lock state and locks the hidden one too.
+      local sysbus
+      sysbus=$(dbus-daemon --session --fork --print-address=1 --nopidfile 2>/dev/null | head -1)
+      [[ -n $sysbus ]] && env_kv+=("DBUS_SYSTEM_BUS_ADDRESS=$sysbus")
       setsid "${scope[@]}" env -i "${env_kv[@]}" dbus-run-session "$cmd" >"$log" 2>&1 < /dev/null &
       for i in $(seq 60); do sandbox_bus "$look" >/dev/null && break; sleep 1; done
       sandbox_bus "$look" >/dev/null || die "The hidden $look session didn't start (see $log)."
