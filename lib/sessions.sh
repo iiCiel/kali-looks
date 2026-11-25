@@ -311,7 +311,7 @@ sandbox_env() { # prints KEY=VALUE lines
   printf '%s\n' "HOME=$h" "DISPLAY=$d" "XDG_RUNTIME_DIR=$rt" "XDG_SESSION_TYPE=x11" \
     "XDG_CURRENT_DESKTOP=KDE" "XDG_SESSION_DESKTOP=KDE" "KDE_FULL_SESSION=true" "KDE_SESSION_VERSION=6" \
     "DESKTOP_SESSION=kali-looks-$look" "LANG=$(session_lang)" \
-    "PATH=$HOME/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" \
+    "PATH=$HERE/lib/sandbox-bin:$HOME/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" \
     "USER=$USER" "LOGNAME=$USER" "SHELL=/bin/bash" "XDG_CONFIG_HOME=$CFG_ROOT/$look"
 }
 

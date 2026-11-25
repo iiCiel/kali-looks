@@ -1,0 +1,34 @@
+#!/bin/bash
+# systemctl stand-in for kali-looks' hidden sessions. They have their own D-Bus and no
+# systemd user manager, so `systemctl --user` work is recorded in the look's own config
+# (enable = the usual .wants link) and takes effect when you log into that look for real.
+# Anything else goes to the real systemctl.
+[[ " $* " == *" --user "* ]] || exec /usr/bin/systemctl "$@"
+args=()
+for a in "$@"; do
+  case $a in --user|--now|--quiet|-q|--no-block|--no-pager|--no-ask-password) ;; *) args+=("$a") ;; esac
+done
+cmd=${args[0]:-}; units=("${args[@]:1}")
+dir="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
+restart_shell() {
+  kquitapp6 plasmashell >/dev/null 2>&1 || pkill -x -u "$(id -u)" plasmashell 2>/dev/null
+  sleep 1
+  setsid plasmashell >/dev/null 2>&1 < /dev/null &
+}
+case $cmd in
+  enable)
+    for u in "${units[@]}"; do
+      f="$dir/$u"; [[ -f $f ]] || continue
+      for w in $(sed -n 's/^WantedBy=//p' "$f"); do mkdir -p "$dir/$w.wants"; ln -sf "$f" "$dir/$w.wants/$u"; done
+    done ;;
+  disable)
+    for u in "${units[@]}"; do rm -f "$dir"/*.wants/"$u"; done ;;
+  is-enabled)
+    if compgen -G "$dir/*.wants/${units[0]}" >/dev/null; then echo enabled; else echo disabled; exit 1; fi ;;
+  is-active|is-failed) echo inactive; exit 3 ;;
+  restart|try-restart|reload-or-restart|start)
+    for u in "${units[@]}"; do [[ $u == plasma-plasmashell.service ]] && restart_shell; done ;;
+  show-environment) env ;;
+  *) ;;
+esac
+exit 0
