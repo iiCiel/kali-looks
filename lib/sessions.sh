@@ -326,6 +326,8 @@ sandbox_prepare() {
   for d in Desktop Documents Downloads Music Pictures Videos Templates Public .icons .mozilla .themes .fonts; do
     [[ -e $HOME/$d ]] && ln -sfn "$HOME/$d" "$h/$d"
   done
+  # (screenshots for the README use an empty desktop)
+  if [[ -n ${SANDBOX_DESKTOP:-} ]]; then mkdir -p "$SANDBOX_DESKTOP"; ln -sfn "$SANDBOX_DESKTOP" "$h/Desktop"; fi
   true
 }
 
