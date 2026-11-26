@@ -264,9 +264,10 @@ look_remove() {
 set -euo pipefail
 # delete what isn't a Kali package's file
 # (dpkg may list /lib/... for /usr/lib/... on merged-/usr systems: count both)
-cat /var/lib/dpkg/info/*.list | sed -E 'p; s#^/(lib|lib64|bin|sbin)/#/usr/\\1/#' | sort -u > /tmp/kali-looks-dpkg-files.txt
-grep -v -x -F -f /tmp/kali-looks-dpkg-files.txt '$man' | while IFS= read -r f; do rm -f -- "\$f"; done
-rm -f /tmp/kali-looks-dpkg-files.txt
+dpkgf=\$(mktemp)
+cat /var/lib/dpkg/info/*.list | sed -E 'p; s#^/(lib|lib64|bin|sbin)/#/usr/\\1/#' | sort -u > "\$dpkgf"
+grep -v -x -F -f "\$dpkgf" '$man' | while IFS= read -r f; do rm -f -- "\$f"; done
+rm -f "\$dpkgf"
 if [ -s '$pk' ]; then
   DEBIAN_FRONTEND=noninteractive apt-get install -y --reinstall \$(cat '$pk')
 fi

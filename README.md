@@ -36,8 +36,15 @@ Left out on purpose, because they'd reach outside the look's own session: Firefo
 - `~/.config` becomes a link. Your own settings (Xfce, and every app) live in `~/.local/share/kali-looks/config/base`; each look has its own folder next to it.
 - A look's folder holds that look's desktop settings and links back to your own settings for everything else, so Firefox, Chrome, VS Code, Claude and the rest are the same in every session. App folders created while you're in a look move to your own settings automatically.
 - A small hook in `~/.xsessionrc` points `~/.config` at the right folder before each session starts. Xfce gets exactly the folder it always had.
+- The few desktop settings that live outside `~/.config` (the GTK 2 theme in `~/.gtkrc-2.0` and the default pointer) are swapped the same way, so a look's pointer never shows up in Xfce.
+- Sessions that start without `~/.xsessionrc` (Plasma on Wayland, Xfce on Wayland, the plain Plasma session) are hidden from the login screen, since they'd run on whichever look's settings were used last. `looks sessions remove` brings them back.
+- A remote desktop session (Chrome Remote Desktop) always uses your own settings and never moves `~/.config`.
 - `looks setup` runs each look's installer inside a hidden session (its own X display and D-Bus), so your screen isn't touched while it installs.
 - `looks reset <look>` starts a look over from scratch (the old settings are kept in a backup). `looks sessions remove` turns `~/.config` back into a plain folder.
+
+## Fewer password prompts (optional)
+
+`looks auth` installs a polkit rule: after you type your password once, admin prompts from your desktop are skipped for 30 minutes. It covers any `pkexec` prompt, not only kali-looks, so leave it off on a machine you share. The window only opens or extends when you type your password, never on its own, and it ends at reboot. `looks auth remove` takes it out.
 
 ## Windows 7: read this first
 

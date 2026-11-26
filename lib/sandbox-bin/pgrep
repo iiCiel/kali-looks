@@ -3,12 +3,39 @@
 # hidden display, so installers never act on your real desktop's processes.
 on_display() { { tr '\0' '\n' < "/proc/$1/environ"; } 2>/dev/null | grep -qx "DISPLAY=$DISPLAY"; }
 [[ -n ${DISPLAY:-} ]] || exec /usr/bin/pgrep "$@"
-out=$(/usr/bin/pgrep "$@"); rc=$?
+# options that change the output format are applied after filtering
+count=0 delim=$'\n' pick="" args=()
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    -c|--count) count=1 ;;
+    -n|--newest) pick=n ;;
+    -o|--oldest) pick=o ;;
+    -d|--delimiter) delim=$2; shift ;;
+    -d?*) delim=${1#-d} ;;
+    --delimiter=*) delim=${1#*=} ;;
+    *) args+=("$1") ;;
+  esac
+  shift
+done
+out=$(/usr/bin/pgrep "${args[@]}"); rc=$?
+# never report ourselves or the stand-ins that called us (pkill -f would kill itself)
+declare -A mine=(); p=$BASHPID
+while [[ -n $p && $p != 0 && $p != 1 ]]; do mine[$p]=1; p=$(awk '{print $4}' "/proc/$p/stat" 2>/dev/null); done
 [[ $rc -le 1 ]] || exit $rc
-found=1
+lines=()
 while IFS= read -r line; do
   [[ -n $line ]] || continue
-  pid=${line%% *}
-  if on_display "$pid"; then printf '%s\n' "$line"; found=0; fi
+  [[ -n ${mine[${line%% *}]:-} ]] && continue
+  on_display "${line%% *}" && lines+=("$line")
 done <<<"$out"
-exit $found
+if [[ -n $pick && ${#lines[@]} -gt 0 ]]; then
+  best=""; for line in "${lines[@]}"; do
+    s=$(awk '{print $22}' "/proc/${line%% *}/stat" 2>/dev/null) || continue
+    if [[ -z $best ]] || { [[ $pick == n ]] && (( s >= bs )); } || { [[ $pick == o ]] && (( s < bs )); }; then best=$line; bs=$s; fi
+  done
+  lines=(); [[ -n $best ]] && lines=("$best")
+fi
+if [[ $count == 1 ]]; then echo "${#lines[@]}"
+elif [[ ${#lines[@]} -gt 0 ]]; then (IFS=; first=1; for l in "${lines[@]}"; do [[ $first == 1 ]] || printf '%s' "$delim"; printf '%s' "$l"; first=0; done; echo)
+fi
+[[ ${#lines[@]} -gt 0 ]]

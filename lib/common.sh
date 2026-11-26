@@ -26,8 +26,12 @@ ok()   { printf '%s  ✓%s %s\n' "$C_GRN" "$C_OFF" "$*"; }
 warn() { printf '%s  !%s %s\n' "$C_YEL" "$C_OFF" "$*" >&2; }
 die()  { printf '%serror:%s %s\n' "$C_RED" "$C_OFF" "$*" >&2; exit 1; }
 
-# sudo needs a terminal for the password; without one (a launcher, a background job) use pkexec
-as_root() { auth_window_open; if [[ $ROOT_CMD == pkexec || ! -t 0 ]]; then pkexec "$@"; else sudo "$@"; fi; }
+# sudo needs a terminal for the password; without one (a launcher, a background job) use
+# pkexec. With the 30-minute window set up, pkexec is used so the window applies.
+as_root() {
+  auth_window_open
+  if [[ $ROOT_CMD == pkexec || ! -t 0 || -x $AUTH_HELPER ]]; then pkexec "$@"; else sudo "$@"; fi
+}
 
 # The 30-minute window (`looks auth`): one password, then no admin prompts for 30 minutes.
 AUTH_HELPER=/usr/local/libexec/kali-looks-auth-window
@@ -74,7 +78,7 @@ sha_ok() { echo "$2  $1" | sha256sum -c --status; }
 in_plasma() { [[ ${XDG_CURRENT_DESKTOP:-} == *KDE* ]] && pgrep -u "$(id -u)" -x plasmashell >/dev/null; }
 is_wayland() { [[ ${XDG_SESSION_TYPE:-} == wayland ]]; }
 
-qdbus() { if command -v qdbus6 >/dev/null; then qdbus6 "$@"; else qdbus "$@"; fi; }
+qdbus() { if command -v qdbus6 >/dev/null; then qdbus6 "$@"; else command qdbus "$@"; fi; }
 
 # Run a Plasma desktop-scripting snippet in the running shell.
 plasma_script() { qdbus org.kde.plasmashell /PlasmaShell org.kde.PlasmaShell.evaluateScript "$1"; }

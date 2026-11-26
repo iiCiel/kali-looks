@@ -4,6 +4,8 @@
 # (enable = the usual .wants link) and takes effect when you log into that look for real.
 # Anything else goes to the real systemctl.
 [[ " $* " == *" --user "* ]] || exec /usr/bin/systemctl "$@"
+# Run as root (by an installer), act as you: never start a root plasmashell
+if [[ $EUID -eq 0 && -n ${SUDO_USER:-} ]]; then exec runuser -u "$SUDO_USER" -- "$0" "$@"; fi
 args=()
 for a in "$@"; do
   case $a in --user|--now|--quiet|-q|--no-block|--no-pager|--no-ask-password) ;; *) args+=("$a") ;; esac

@@ -1,0 +1,10 @@
+#!/bin/bash
+# pidof stand-in for kali-looks' hidden sessions: only this display's processes.
+on_display() { { tr '\0' '\n' < "/proc/$1/environ"; } 2>/dev/null | grep -qx "DISPLAY=$DISPLAY"; }
+real=/usr/bin/pidof; [[ -x $real ]] || real=/bin/pidof
+[[ -n ${DISPLAY:-} ]] || exec "$real" "$@"
+single=0 args=()
+for a in "$@"; do [[ $a == -s ]] && single=1 || args+=("$a"); done
+out=(); for p in $("$real" "${args[@]}"); do on_display "$p" && out+=("$p"); done
+[[ ${#out[@]} -gt 0 ]] || exit 1
+if [[ $single == 1 ]]; then echo "${out[0]}"; else echo "${out[*]}"; fi

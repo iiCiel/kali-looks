@@ -12,6 +12,7 @@ CFG_ROOT="$DATA_DIR/config"
 BASE_CFG="$CFG_ROOT/base"
 SESSION_LOG="$DATA_DIR/session.log"
 XSESSIONRC="$HOME/.xsessionrc"
+HIDDEN_SESSIONS="/usr/share/xsessions/aerothemeplasmax11.desktop /usr/share/wayland-sessions/aerothemeplasma.desktop /usr/share/xsessions/plasmax11.desktop /usr/share/xsessions/plasma.desktop /usr/share/wayland-sessions/plasma.desktop /usr/share/wayland-sessions/xfce-wayland.desktop"
 
 # session id | look | name on the login screen | command | comment
 LOOK_SESSIONS=(
@@ -40,7 +41,9 @@ look_of_session() {
 # Everything else is shared with your own settings.
 look_owned() {
   case $1 in
-    .seeded|*rc|kde*|kwin*|kscreen*|ksmserver*|kactivitymanagerd*|plasma*|KDE|Kvantum|kvantum*) return 0 ;;
+    .seeded|.home|k*rc|kde*|kwin*|kscreen*|ksmserver*|kactivitymanagerd*|plasma*|KDE|Kvantum|kvantum*) return 0 ;;
+    dolphinrc|katerc|spectaclerc|breezerc|auroraerc|powermanagementprofilesrc|powerdevilrc) return 0 ;;
+    systemsettingsrc|bluedevilglobalrc|baloofilerc|*plasma*rc) return 0 ;;
     gtk-2.0|gtk-3.0|gtk-4.0|gtkrc*|xsettingsd|Trolltech.conf|qt5ct|qt6ct|fontconfig|menus|dconf) return 0 ;;
     autostart|systemd|environment.d|session|xdg-desktop-portal*|*portals.conf|mimeapps.list) return 0 ;;
     xfce4|Thunar|xfwm4|plank|picom|rofi|cupertino-xfce|kali-looks) return 0 ;;
@@ -53,17 +56,22 @@ look_owned() {
 # Turn the real ~/.config folder into a link to $BASE_CFG (once). Nothing moves on
 # disk except the folder's name, so running programs keep working.
 ensure_config_link() {
-  local c="$HOME/.config"
-  [[ -L $c ]] && return 0
+  local c="$HOME/.config" t
+  if [[ -L $c ]]; then
+    t=$(readlink -f "$c")
+    [[ $t == "$CFG_ROOT"/* && -d $t ]] && return 0
+    warn "\$HOME/.config is a link kali-looks didn't make ($t); leaving it alone."
+    return 1
+  fi
   mkdir -p "$CFG_ROOT"
   if [[ -e $BASE_CFG ]]; then
     warn "$BASE_CFG already exists but ~/.config is a real folder; leaving both alone."
     return 1
   fi
   if [[ -d $c ]]; then
-    mv -T "$c" "$BASE_CFG" && ln -s "$BASE_CFG" "$c"
+    mv -T "$c" "$BASE_CFG" && ln -sT "$BASE_CFG" "$c"
   else
-    mkdir -p "$BASE_CFG" && ln -s "$BASE_CFG" "$c"
+    mkdir -p "$BASE_CFG" && ln -sT "$BASE_CFG" "$c"
   fi
 }
 
@@ -75,18 +83,16 @@ sync_look_config() {
   local dir="$CFG_ROOT/$1" e name
   mkdir -p "$dir"
   shopt -s dotglob nullglob
-  for e in "$dir"/*; do
-    name=${e##*/}
-    [[ -L $e || ! -d $e ]] && continue
-    look_owned "$name" && continue
-    if [[ ! -e $BASE_CFG/$name ]]; then mv -T "$e" "$BASE_CFG/$name" && ln -s "$BASE_CFG/$name" "$e"; fi
-  done
+  adopt_app_folders
   for e in "$BASE_CFG"/*; do
     name=${e##*/}
     look_owned "$name" && continue
     if [[ -L $dir/$name ]]; then [[ -e $dir/$name ]] || ln -sfn "$e" "$dir/$name"; continue; fi
     [[ -e $dir/$name ]] && continue
-    if [[ -d $e ]]; then ln -s "$e" "$dir/$name"; else cp -p "$e" "$dir/$name"; fi
+    if [[ -d $e ]]; then ln -s "$e" "$dir/$name"
+    elif [[ -L $e ]]; then cp -P "$e" "$dir/$name"
+    elif [[ -f $e ]]; then cp -p "$e" "$dir/$name"
+    fi
   done
   for e in "$dir"/*; do if [[ -L $e && ! -e $e ]]; then rm -f "$e"; fi; done
   if [[ ! -e $dir/.seeded ]]; then
@@ -99,12 +105,55 @@ sync_look_config() {
   shopt -u dotglob nullglob
 }
 
+# App folders created while a look was running (a new app, or an app first opened
+# there) move into your own settings, from every look, so all sessions share them.
+# If both sides already have one, the look keeps its copy and the log says so.
+adopt_app_folders() {
+  local d e name
+  shopt -s dotglob nullglob
+  for d in "$CFG_ROOT"/*/; do
+    d=${d%/}; [[ $d == "$BASE_CFG" ]] && continue
+    for e in "$d"/*; do
+      name=${e##*/}
+      [[ -L $e || ! -d $e ]] && continue
+      look_owned "$name" && continue
+      if [[ ! -e $BASE_CFG/$name ]]; then
+        mv -T "$e" "$BASE_CFG/$name" && ln -s "$BASE_CFG/$name" "$e"
+      else
+        echo "note: ${d##*/} has its own ~/.config/$name (your own settings have one too); not merged"
+      fi
+    done
+  done
+  shopt -u dotglob nullglob
+}
+
+# A few desktop settings live outside ~/.config: the default pointer and the GTK 2 theme.
+# Each look keeps its own copy (in <tree>/.home); the hook links the right one in.
+HOME_OWNED=(.gtkrc-2.0 .icons/default .local/share/icons/default)
+swap_home_files() { # swap_home_files <from-look> <to-look>
+  local from=$1 to=$2 rel p store
+  for rel in "${HOME_OWNED[@]}"; do
+    p="$HOME/$rel"
+    # whatever the last session left there (a real file, not one of our links) is its own
+    if [[ -e $p || -L $p ]] && ! [[ -L $p && $(readlink "$p") == "$CFG_ROOT"/* ]]; then
+      store="$CFG_ROOT/$from/.home/$rel"
+      mkdir -p "$(dirname "$store")"; rm -rf "$store"; mv -T "$p" "$store"
+    fi
+    rm -f "$p"
+    store="$CFG_ROOT/$to/.home/$rel"
+    if [[ -e $store || -L $store ]]; then mkdir -p "$(dirname "$p")"; ln -sT "$store" "$p"; fi
+  done
+}
+
 # One time: KDE sessions that ran before kali-looks 0.2 wrote their settings into your
 # own config. Move them aside (kept in a backup) so Xfce is exactly as it was.
 clean_base_once() {
   local flag="$DATA_DIR/.base-cleaned" bk name g="$BASE_CFG/gtk-3.0"
   [[ -e $flag ]] && return 0
-  bk="$DATA_DIR/backup/kde-leftovers-$(date +%Y%m%d-%H%M%S)"
+  # They become the plain Plasma session's own settings (it gets its own tree, like a
+  # look); if that tree already exists they go to a backup instead.
+  if [[ -e $CFG_ROOT/plasma ]]; then bk="$DATA_DIR/backup/kde-leftovers-$(date +%Y%m%d-%H%M%S)"
+  else bk="$CFG_ROOT/plasma"; fi
   mkdir -p "$bk/gtk-3.0"
   for name in kdedefaults kdeglobals plasma-localerc Kvantum aerothemeplasmarc kactivitymanagerdrc \
       kactivitymanagerd-statsrc kconf_updaterc kded5rc kded6rc ktimezonedrc kwinrulesrc kwinrc \
@@ -131,9 +180,17 @@ clean_base_once() {
 # config folder's real path: ~/.xsessionrc exports it as XDG_CONFIG_HOME (some tools
 # refuse to write through the ~/.config link).
 cmd_session_hook() {
-  local ds=${1:-} look target=""
+  local ds=${1:-} look target="" prev ok=""
   mkdir -p "$DATA_DIR"
   look=$(look_of_session "$ds")
+  # Chrome Remote Desktop's own desktop (when nobody is logged in at the laptop) is your
+  # Xfce: use your settings, but don't repoint ~/.config under a session that may start
+  # at the laptop meanwhile.
+  if [[ ${CHROME_REMOTE_DESKTOP_SESSION:-} == 1 ]]; then
+    echo "$(date '+%F %T') session=$ds (Chrome Remote Desktop) look=base, ~/.config left as is" >>"$SESSION_LOG"
+    [[ -d $BASE_CFG ]] && echo "$BASE_CFG"
+    return 0
+  fi
   {
     echo "$(date '+%F %T') session=$ds look=$look"
     ensure_config_link || exit 0
@@ -144,11 +201,14 @@ cmd_session_hook() {
       sync_look_config "$look"
       target="$CFG_ROOT/$look"
     fi
-    point_config "$target"
+    adopt_app_folders
+    prev=$(current_look)
+    point_config "$target" && ok=1
+    swap_home_files "$prev" "$look" || echo "warning: couldn't swap the pointer/GTK2 files"
     state_set ACTIVE "$look"
     systemctl --user daemon-reload 2>/dev/null || true
   } >>"$SESSION_LOG" 2>&1 || true
-  [[ -L $HOME/.config ]] && readlink -f "$HOME/.config"
+  [[ -n $ok || $(readlink -f "$HOME/.config" 2>/dev/null) == "$target" ]] && [[ -n $target ]] && echo "$target"
   true
 }
 
@@ -159,6 +219,10 @@ if [ -x "$HOME/.local/bin/looks" ]; then
   _looks_cfg=$("$HOME/.local/bin/looks" session-hook "${DESKTOP_SESSION:-}" 2>/dev/null) || _looks_cfg=
   if [ -n "$_looks_cfg" ] && [ -d "$_looks_cfg" ]; then export XDG_CONFIG_HOME="$_looks_cfg"; fi
   unset _looks_cfg
+elif [ -L "$HOME/.config" ] && [ -d "$HOME/.local/share/kali-looks/config/base" ]; then
+  # the looks command is missing (repo moved?): fall back to your own settings
+  ln -sfn "$HOME/.local/share/kali-looks/config/base" "$HOME/.config.kali-looks" \
+    && mv -Tf "$HOME/.config.kali-looks" "$HOME/.config"
 fi
 # <<< kali-looks <<<
 EOF
@@ -185,9 +249,11 @@ cmd_sessions_install() {
         "$name" "$comment" "$cmd" "$cmd" "$look"
       echo 'EOF'
     done
-    # AeroThemePlasma ships its own session entries; ours replaces them (same command).
-    echo 'for f in /usr/share/xsessions/aerothemeplasmax11.desktop /usr/share/wayland-sessions/aerothemeplasma.desktop; do'
-    echo '  if [ -f "$f" ] && ! grep -q "^NoDisplay=true" "$f"; then echo "NoDisplay=true" >> "$f"; fi; done'
+    # Hidden from the login screen: AeroThemePlasma's own entries (ours replace them),
+    # and the plain Plasma and Wayland sessions, which skip ~/.xsessionrc and so would
+    # run on whichever look's settings were used last.
+    echo "for f in $HIDDEN_SESSIONS; do"
+    echo '  if [ -f "$f" ] && ! grep -q "^NoDisplay=true" "$f"; then echo "NoDisplay=true # kali-looks" >> "$f"; fi; done'
   } > "$script"
   log "Adding the looks to the login screen (asks for your password)"
   as_root bash "$script" || { rm -f "$script"; die "Couldn't write the session files."; }
@@ -202,18 +268,21 @@ cmd_sessions_install() {
 
 cmd_sessions_remove() {
   local script
+  [[ $(current_look) == base ]] || die "Log into your own Kali desktop first (you're in $(current_look))."
   script=$(mktemp)
   {
     echo 'rm -f /usr/share/xsessions/kali-looks-*.desktop'
-    echo 'for f in /usr/share/xsessions/aerothemeplasmax11.desktop /usr/share/wayland-sessions/aerothemeplasma.desktop; do'
-    echo '  if [ -f "$f" ]; then sed -i "/^NoDisplay=true$/d" "$f"; fi; done'
+    echo "for f in $HIDDEN_SESSIONS; do"
+    echo '  if [ -f "$f" ]; then sed -i "/^NoDisplay=true\( # kali-looks\)\?$/d" "$f"; fi; done'
   } > "$script"
   as_root bash "$script" || warn "Couldn't remove the session files."
   rm -f "$script"
   strip_marked "$XSESSIONRC"
   rm -f "$LOCAL_SHARE/applications/kali-looks-switch.desktop"
   if [[ -L $HOME/.config && -d $BASE_CFG ]]; then
+    swap_home_files base base
     rm -f "$HOME/.config" && mv -T "$BASE_CFG" "$HOME/.config"
+    for d in "$CFG_ROOT"/*/; do find "$d" -maxdepth 1 -type l -lname "$BASE_CFG/*" -delete 2>/dev/null || true; done
     ok "Your ~/.config is your own settings folder again. Each look's settings stay in $CFG_ROOT."
   fi
   ok "Sessions removed."
@@ -296,7 +365,7 @@ cmd_switch() {
 # whose .local is your real one, so everything installed there is what you'll get.
 
 sandbox_home() { echo "$DATA_DIR/sandbox/$1/home"; }
-sandbox_runtime() { echo "/tmp/kali-looks-sandbox-$(id -u)-$1"; }
+sandbox_runtime() { echo "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/kali-looks-sandbox-$1"; }
 sandbox_display() { case $1 in macos) echo :5 ;; winxp) echo :6 ;; win7) echo :7 ;; *) echo :8 ;; esac; }
 
 session_lang() {
@@ -312,7 +381,8 @@ sandbox_env() { # prints KEY=VALUE lines
     "XDG_CURRENT_DESKTOP=KDE" "XDG_SESSION_DESKTOP=KDE" "KDE_FULL_SESSION=true" "KDE_SESSION_VERSION=6" \
     "DESKTOP_SESSION=kali-looks-$look" "LANG=$(session_lang)" \
     "PATH=$HERE/lib/sandbox-bin:$HOME/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" \
-    "USER=$USER" "LOGNAME=$USER" "SHELL=/bin/bash" "XDG_CONFIG_HOME=$CFG_ROOT/$look"
+    "USER=$USER" "LOGNAME=$USER" "SHELL=/bin/bash" "XDG_CONFIG_HOME=$CFG_ROOT/$look" \
+    "XAUTHORITY=$rt/Xauthority"
 }
 
 sandbox_prepare() {
@@ -326,6 +396,8 @@ sandbox_prepare() {
   for d in Desktop Documents Downloads Music Pictures Videos Templates Public .icons .mozilla .themes .fonts; do
     [[ -e $HOME/$d ]] && ln -sfn "$HOME/$d" "$h/$d"
   done
+  # pointer/GTK 2 files written there land in your home, and are filed under the look at stop
+  ln -sfn "$HOME/.gtkrc-2.0" "$h/.gtkrc-2.0"
   # (screenshots for the README use an empty desktop)
   if [[ -n ${SANDBOX_DESKTOP:-} ]]; then mkdir -p "$SANDBOX_DESKTOP"; ln -sfn "$SANDBOX_DESKTOP" "$h/Desktop"; fi
   true
@@ -349,12 +421,26 @@ cmd_sandbox() {
   log="$DATA_DIR/sandbox/$look/session.log"
   case $action in
     start)
+      if pgrep -f "Xvfb $d " >/dev/null; then die "A hidden $look session is already running (looks sandbox $look stop)."; fi
       sandbox_prepare "$look"
-      mkdir -p "$rt"; chmod 700 "$rt"
-      if ! pgrep -f "Xvfb $d " >/dev/null; then
-        setsid Xvfb "$d" -screen 0 "${SANDBOX_SIZE:-1920x1080}x24" +extension GLX -nolisten tcp >"$DATA_DIR/sandbox/$look/xvfb.log" 2>&1 < /dev/null &
-        sleep 2
+      mkdir -p "$rt" "$DATA_DIR/sandbox/$look"; chmod 700 "$rt"
+      # The look's pointer/GTK 2 files are the ones in your home while it runs here
+      swap_home_files "$(current_look)" "$look"
+      # Don't bring back apps from the look's last real session (they'd share your
+      # browser profiles etc. on the hidden screen)
+      if command -v kwriteconfig6 >/dev/null; then
+        local lm; lm=$(kreadconfig6 --file "$CFG_ROOT/$look/ksmserverrc" --group General --key loginMode 2>/dev/null || true)
+        echo "${lm:-unset}" > "$DATA_DIR/sandbox/$look/loginMode"
+        kwriteconfig6 --file "$CFG_ROOT/$look/ksmserverrc" --group General --key loginMode emptySession
       fi
+      local -a xauth=()
+      rm -f "$rt/Xauthority"; touch "$rt/Xauthority"; chmod 600 "$rt/Xauthority"
+      if command -v xauth >/dev/null && xauth -q -f "$rt/Xauthority" add "$d" . "$(mcookie 2>/dev/null || od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"; then
+        xauth=(-auth "$rt/Xauthority")
+      fi
+      setsid Xvfb "$d" -screen 0 "${SANDBOX_SIZE:-1920x1080}x24" +extension GLX -nolisten tcp \
+        "${xauth[@]}" >"$DATA_DIR/sandbox/$look/xvfb.log" 2>&1 < /dev/null &
+      sleep 2
       cmd=$(session_field "$look" 3 2>/dev/null || echo startplasma-x11)
       mapfile -t env_kv < <(sandbox_env "$look")
       # In its own scope, outside your login session: otherwise locking your screen
@@ -366,6 +452,7 @@ cmd_sandbox() {
       # The desktop gets a stand-in system bus without logind: otherwise its screen
       # locker follows your real session's lock state and locks the hidden one too.
       local -a bus=()
+      if [[ -s $DATA_DIR/sandbox/$look/sysbus.pid ]]; then kill "$(cat "$DATA_DIR/sandbox/$look/sysbus.pid")" 2>/dev/null || true; fi
       mapfile -t bus < <(dbus-daemon --session --fork --print-address=1 --print-pid=1 --nopidfile 2>/dev/null)
       if [[ -n ${bus[0]:-} ]]; then
         env_kv+=("DBUS_SYSTEM_BUS_ADDRESS=${bus[0]}")
@@ -381,10 +468,17 @@ cmd_sandbox() {
       done
       sleep 2; pkill -f "Xvfb $d " || true
       if [[ -s $DATA_DIR/sandbox/$look/sysbus.pid ]]; then kill "$(cat "$DATA_DIR/sandbox/$look/sysbus.pid")" 2>/dev/null || true; rm -f "$DATA_DIR/sandbox/$look/sysbus.pid"; fi
+      if [[ -f $DATA_DIR/sandbox/$look/loginMode ]]; then
+        local lm; lm=$(cat "$DATA_DIR/sandbox/$look/loginMode"); rm -f "$DATA_DIR/sandbox/$look/loginMode"
+        if ! command -v kwriteconfig6 >/dev/null; then :
+        elif [[ $lm == unset ]]; then kwriteconfig6 --file "$CFG_ROOT/$look/ksmserverrc" --group General --key loginMode --delete
+        else kwriteconfig6 --file "$CFG_ROOT/$look/ksmserverrc" --group General --key loginMode "$lm"; fi
+        swap_home_files "$look" "$(current_look)"
+      fi
       ok "Hidden $look session stopped" ;;
     shot)
       mkdir -p "$DATA_DIR/sandbox/$look/shots"
-      DISPLAY=$d import -window root "$DATA_DIR/sandbox/$look/shots/${3:-shot}.png"
+      DISPLAY=$d XAUTHORITY="$rt/Xauthority" import -window root "$DATA_DIR/sandbox/$look/shots/${3:-shot}.png"
       echo "$DATA_DIR/sandbox/$look/shots/${3:-shot}.png" ;;
     run)
       shift 2

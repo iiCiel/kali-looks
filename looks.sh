@@ -54,7 +54,8 @@ look_run() { local -a e; mapfile -t e < <(look_envs); env -i "${e[@]}" "$@"; }
 look_root() {
   local -a e; mapfile -t e < <(look_envs)
   auth_window_open
-  pkexec env "${e[@]}" SUDO_USER="$(id -un)" SUDO_UID="$(id -u)" SUDO_GID="$(id -g)" "$@"
+  # PYTHONNOUSERSITE: root Python mustn't load packages from your ~/.local
+  pkexec env "${e[@]}" PYTHONNOUSERSITE=1 SUDO_USER="$(id -un)" SUDO_UID="$(id -u)" SUDO_GID="$(id -g)" "$@"
 }
 
 # ---- commands ---------------------------------------------------------------------
@@ -88,8 +89,8 @@ cmd_setup() {
   else
     SETUP_MODE=sandbox
     log "Starting a hidden $LOOK_TITLE session to set it up in (your screen isn't touched)"
-    cmd_sandbox "$id" start
     trap 'cmd_sandbox "$LOOK_ID" stop >/dev/null 2>&1 || true' EXIT
+    cmd_sandbox "$id" start
   fi
   look_setup
   touch "$LOOK_CFG/.ready"
@@ -157,6 +158,7 @@ case "${1:-help}" in
     [[ -n ${2:-} ]] || die "Which look? e.g. looks $1 win7"
     load_look "$2"
     declare -F "look_$1" >/dev/null || die "$LOOK_TITLE has nothing to $1."
+    [[ $1 != remove || $(current_look) != "$2" ]] || die "You're logged into $LOOK_TITLE; switch to another session first."
     mkdir -p "$DATA_DIR" "$SRC_DIR"
     "look_$1" ;;
   install) cmd_install ;;

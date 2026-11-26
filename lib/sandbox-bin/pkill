@@ -1,12 +1,17 @@
 #!/bin/bash
 # pkill stand-in for kali-looks' hidden sessions: signals only processes on this display.
+# Run as root (by an installer), it acts as you: your processes are the only ones it may touch.
+if [[ $EUID -eq 0 && -n ${SUDO_USER:-} ]]; then exec runuser -u "$SUDO_USER" -- "$0" "$@"; fi
+is_sig() { [[ $1 =~ ^[0-9]+$ ]] || kill -l "${1#SIG}" >/dev/null 2>&1; }
 sig=TERM; args=()
 while [[ $# -gt 0 ]]; do
   case $1 in
     --signal) sig=$2; shift ;;
     --signal=*) sig=${1#*=} ;;
-    -[0-9]*|-[A-Z]*) sig=${1#-} ;;
     -e|--echo) ;;
+    -[uUPGgstF]|--euid|--uid|--parent|--group|--pgroup|--session|--terminal|--pidfile|--ns|--nslist)
+      args+=("$1" "$2"); shift ;;
+    -?*) if [[ $1 != --* ]] && is_sig "${1#-}"; then sig=${1#-}; else args+=("$1"); fi ;;
     *) args+=("$1") ;;
   esac
   shift

@@ -1,8 +1,12 @@
 // kali-looks: once you've entered your password for `looks`, its admin prompts (and any
-// other pkexec prompt from your desktop) are skipped for the next 30 minutes.
+// other pkexec prompt from your desktop) are skipped for the next 30 minutes. The window
+// can only be opened (or extended) with your password: never by a program on its own.
 // Remove with: looks auth remove
 polkit.addRule(function (action, subject) {
   if (action.id != "org.freedesktop.policykit.exec" || !subject.local || !subject.active)
+    return polkit.Result.NOT_HANDLED;
+  // Opening the window always asks for the password
+  if (action.lookup("program") == "/usr/local/libexec/kali-looks-auth-open")
     return polkit.Result.NOT_HANDLED;
   try {
     polkit.spawn(["/usr/local/libexec/kali-looks-auth-window", subject.user]);
