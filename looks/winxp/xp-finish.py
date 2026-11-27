@@ -273,10 +273,14 @@ def session_config(cfg):
                   text, re.M)
     if m:
         launchers = [f"file://{APPS / 'xp-show-desktop.desktop'}"]
-        for app in ["firefox-esr.desktop", "firefox.desktop"]:
-            if (Path("/usr/share/applications") / app).exists():
-                launchers.append(f"file:///usr/share/applications/{app}")
-                break
+        ie6 = APPS / "firefox-esr-ie6.desktop"
+        if ie6.exists():
+            launchers.append(f"file://{ie6}")
+        else:
+            for app in ["firefox-esr.desktop", "firefox.desktop"]:
+                if (Path("/usr/share/applications") / app).exists():
+                    launchers.append(f"file:///usr/share/applications/{app}")
+                    break
         launchers.append("file:///usr/share/applications/org.kde.dolphin.desktop")
         ini_set(applets, ["Containments", m.group(1), "Applets", m.group(2), "Configuration", "General"],
                 {"launcherUrls": ",".join(launchers)})
@@ -359,6 +363,59 @@ def most_used_programs():
     log("most-used list started with " + ", ".join(picks))
 
 
+IE6 = HOME / ".local/share/firefox-esr-ie6"
+IE6_ADDONS = {
+    # CustomTube (lightbeam, MIT): YouTube's layouts back to 2008
+    "{7917c4c9-c062-427a-9d29-15db676687eb}": "customtube",
+    # Violentmonkey (MIT): runs the old-Google userscript
+    "{aecec67f-0d10-4fa7-b7c7-609a2db280cf}": "violentmonkey",
+}
+
+
+def ie6_browser(cfg):
+    """XP's browser was Internet Explorer: in this look, links open in XPlasma's IE6
+    replica (its own Firefox ESR and profile; your usual Firefox is untouched)."""
+    if not (IE6 / "launch").exists():
+        return
+    entry = "firefox-esr-ie6.desktop"
+    mime = cfg / "mimeapps.list"
+    ini_set(mime, ["Default Applications"],
+            {t: entry + ";" for t in ["text/html", "application/xhtml+xml",
+                                       "x-scheme-handler/http", "x-scheme-handler/https"]})
+    ini_set(cfg / "kdeglobals", ["General"], {"BrowserApplication": entry})
+    # Its add-ons for old YouTube and Google, fetched by Firefox from
+    # addons.mozilla.org; and no self-updates that could break the IE6 look.
+    dist = IE6 / "firefox/distribution"
+    dist.mkdir(parents=True, exist_ok=True)
+    policies = {"policies": {"DisableAppUpdate": True, "ExtensionSettings": {
+        guid: {"installation_mode": "normal_installed",
+               "install_url": f"https://addons.mozilla.org/firefox/downloads/latest/{slug}/latest.xpi"}
+        for guid, slug in IE6_ADDONS.items()}}}
+    # Websites in light mode, as every site was in XP's day.
+    user_js = IE6 / "profile/user.js"
+    if user_js.exists():
+        js = user_js.read_text()
+        pref = 'user_pref("layout.css.prefers-color-scheme.content-override", 1);  // kali-looks\n'
+        if pref not in js:
+            user_js.write_text(js.rstrip("\n") + "\n" + pref)
+    # Our fixes for old YouTube, kept between markers in the profile's userContent.css
+    content = IE6 / "profile/chrome/userContent.css"
+    ours = (HERE / "ie6-youtube-2008.css").read_text()
+    begin, end = "/* >>> kali-looks >>> */\n", "/* <<< kali-looks <<< */\n"
+    if content.parent.is_dir():
+        old = content.read_text() if content.exists() else ""
+        new = re.sub(r"/\* >>> kali-looks >>> \*/\n.*?/\* <<< kali-looks <<< \*/\n", "", old, flags=re.S)
+        new = new.rstrip("\n") + "\n\n" + begin + ours + end
+        if new != old:
+            content.write_text(new)
+            log("IE6 browser: old-YouTube fixes updated")
+    text = json.dumps(policies, indent=2) + "\n"
+    f = dist / "policies.json"
+    if not f.exists() or f.read_text() != text:
+        f.write_text(text)
+        log("IE6 browser: add-ons and no self-updates set")
+
+
 def main():
     args = sys.argv[1:]
     if args and args[0] == "--live":
@@ -376,6 +433,7 @@ def main():
     start_menu_width()
     programs_menus()
     session_config(cfg)
+    ie6_browser(cfg)
 
 
 if __name__ == "__main__":

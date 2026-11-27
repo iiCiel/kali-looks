@@ -5,14 +5,15 @@
 # Luna visual style: taskbar, Start menu, tray, window borders, Qt and GTK controls,
 # fonts, icons, pointers, sounds, Bliss, logout and lock screens.
 # Its installer runs inside this look's session, so everything it changes stays there.
-# Left out: its login screen (SDDM; Kali uses LightDM), boot splash and the IE6 Firefox.
+# Left out: its login screen (SDDM; Kali uses LightDM) and boot splash. The IE6 Firefox
+# (its own Firefox ESR and profile) is the XP session's browser; xp-finish.py sets that up.
 
 LOOK_TITLE="Windows XP"
 XP_VERSION="1.0.4-beta.2"
 XP_URL="https://github.com/ergosteur/XPlasma-Plus/releases/download/v$XP_VERSION/xplasma-plus-$XP_VERSION-installer-generic.tar.gz"
 XP_SHA256="e222821f67091a0362ba91384cb9c2fc77ee854dc0a6dcfe7def43b27345f8fc"
 XP_SRC="$SRC_DIR/xplasma-plus-$XP_VERSION"
-XP_FEATURES="theme_manager,desktop,apps,fonts,taskbar,icons,pointers,sounds,wallpaper,behavior,caption_animation,desktop_icons,session,welcome_splash,lock"
+XP_FEATURES="theme_manager,desktop,apps,fonts,taskbar,icons,pointers,sounds,wallpaper,behavior,caption_animation,desktop_icons,session,welcome_splash,lock,user_pictures,firefox"
 
 xp_backend() { find "$XP_SRC" -maxdepth 2 -name backend.py | head -1; }
 

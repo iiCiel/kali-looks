@@ -1,0 +1,85 @@
+/* kali-looks: YouTube 2008 -- fixes on top of CustomTube's "2008 Layout" for parts of
+   today's YouTube it doesn't know (its last update was February 2024). Only applies
+   while CustomTube's 2008/2009 ("stargazer") layouts are on. */
+@-moz-document domain("youtube.com") {
+
+/* Search box: 2008's square text field and grey "Search" button, below the tabs */
+html[layout^="stargazer"] #center.ytd-masthead { overflow: visible !important; }
+html[layout^="stargazer"] #center.ytd-masthead yt-searchbox {
+  position: absolute !important; top: 36px !important; left: 34px !important;
+  width: 330px !important; max-width: none !important; margin: 0 !important; flex: none !important;
+  z-index: 10 !important;
+}
+html[layout^="stargazer"] .ytSearchboxComponentInputBox {
+  border: 1px solid #999 !important; border-radius: 0 !important;
+  background: #fff !important; box-shadow: none !important;
+  height: 22px !important; min-height: 0 !important; padding: 0 4px !important; margin: 0 !important;
+}
+html[layout^="stargazer"] .ytSearchboxComponentInput {
+  font: 13px Arial, Helvetica, sans-serif !important; color: #000 !important;
+  height: 20px !important; padding: 0 !important;
+}
+html[layout^="stargazer"] .ytSearchboxComponentInput::placeholder { color: transparent !important; }
+html[layout^="stargazer"] .ytSearchboxComponentClearButtonWrapper { display: none !important; }
+html[layout^="stargazer"] .ytSearchboxComponentSearchButton {
+  width: auto !important; height: 24px !important; min-width: 0 !important;
+  margin-left: 4px !important; padding: 0 8px !important;
+  border: 1px solid #9f9fad !important; border-radius: 3px !important;
+  background: linear-gradient(#fdfdfd, #e3e3e8) !important; box-shadow: none !important;
+}
+html[layout^="stargazer"] .ytSearchboxComponentSearchButton:hover { background: #d0d0d7 !important; }
+html[layout^="stargazer"] .ytSearchboxComponentSearchButton > * { display: none !important; }
+html[layout^="stargazer"] .ytSearchboxComponentSearchButton::after {
+  content: "Search"; font: 13px Arial, Helvetica, sans-serif; color: #000;
+}
+
+/* Things 2008 didn't have */
+html[layout^="stargazer"] #voice-search-button.ytd-masthead,
+html[layout^="stargazer"] #ai-companion-button.ytd-masthead,
+html[layout^="stargazer"] #search-button-narrow.ytd-masthead,
+html[layout^="stargazer"] ytd-masthead ytd-topbar-menu-button-renderer,
+html[layout^="stargazer"] ytd-search-header-renderer,
+html[layout^="stargazer"] ytd-mini-guide-renderer,
+html[layout^="stargazer"] ytd-reel-shelf-renderer,
+html[layout^="stargazer"] grid-shelf-view-model,
+html[layout^="stargazer"] ytd-rich-shelf-renderer[is-shorts],
+html[layout^="stargazer"] ytd-video-renderer #menu.ytd-video-renderer { display: none !important; }
+html[layout^="stargazer"] ytd-app[mini-guide-visible] ytd-page-manager.ytd-app { margin-left: 0 !important; }
+
+/* "Sign In" as a plain link */
+html[layout^="stargazer"] ytd-masthead #end a.ytSpecButtonShapeNextHost {
+  border: none !important; background: none !important; box-shadow: none !important;
+  height: auto !important; padding: 0 !important;
+  font: 13px Arial, Helvetica, sans-serif !important; color: #03c !important; text-decoration: underline !important;
+}
+html[layout^="stargazer"] ytd-masthead #end a.ytSpecButtonShapeNextHost .ytSpecButtonShapeNextIcon,
+html[layout^="stargazer"] ytd-masthead #end a.ytSpecButtonShapeNextHost yt-touch-feedback-shape { display: none !important; }
+
+/* Related videos: 2008's small thumbnails */
+html[layout^="stargazer"] #secondary yt-lockup-view-model a.ytLockupViewModelContentImage {
+  width: 120px !important; min-width: 120px !important; max-width: 120px !important;
+  flex: none !important; margin-right: 6px !important;
+}
+html[layout^="stargazer"] #secondary yt-lockup-view-model a.ytLockupViewModelContentImage img {
+  border-radius: 0 !important;
+}
+html[layout^="stargazer"] #secondary yt-lockup-view-model .ytLockupMetadataViewModelTitle {
+  font: bold 12px Arial, Helvetica, sans-serif !important; color: #03c !important;
+}
+html[layout^="stargazer"] #secondary yt-lockup-view-model .ytLockupMetadataViewModelMenuButton { display: none !important; }
+
+/* Square thumbnails everywhere (2008 had no rounded corners) */
+html[layout^="stargazer"] yt-thumbnail-view-model,
+html[layout^="stargazer"] .ytThumbnailViewModelImage,
+html[layout^="stargazer"] .ytThumbnailViewModelImage img,
+html[layout^="stargazer"] ytd-thumbnail a, html[layout^="stargazer"] ytd-thumbnail img { border-radius: 0 !important; }
+
+/* Subscribe: 2008's yellow button */
+html[layout^="stargazer"] ytd-watch-flexy yt-subscribe-button-view-model button,
+html[layout^="stargazer"] ytd-watch-flexy ytd-subscribe-button-renderer button {
+  background: linear-gradient(#fff2b8, #ffd24d) !important; color: #000 !important;
+  border: 1px solid #e0a817 !important; border-radius: 3px !important; box-shadow: none !important;
+  font: bold 12px Arial, Helvetica, sans-serif !important; height: 22px !important; padding: 0 8px !important;
+}
+
+} /* end kali-looks YouTube 2008 */

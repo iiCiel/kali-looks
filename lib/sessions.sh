@@ -302,6 +302,7 @@ fix_sandbox_paths() { # fix_sandbox_paths <look> <stamp file>
     grep -qIF "$sb" "$f" 2>/dev/null || continue
     sed -i "s#$sb#$HOME#g" "$f" && n=$((n+1))
   done < <(find "$CFG_ROOT/$look" "$HOME/.local/share" "$HOME/.themes" "$HOME/.icons" \
+             "$(xdg-user-dir DESKTOP 2>/dev/null || echo "$HOME/Desktop")" \
              -path "$DATA_DIR" -prune -o -type f -newer "$stamp" -print0 2>/dev/null)
   find "$CFG_ROOT/$look" -type f -print0 2>/dev/null | xargs -0r grep -lIF "$sb" 2>/dev/null \
     | while IFS= read -r f; do sed -i "s#$sb#$HOME#g" "$f"; done
