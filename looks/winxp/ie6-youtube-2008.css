@@ -82,4 +82,50 @@ html[layout^="stargazer"] ytd-watch-flexy ytd-subscribe-button-renderer button {
   font: bold 12px Arial, Helvetica, sans-serif !important; height: 22px !important; padding: 0 8px !important;
 }
 
+/* Video player: 2008's single flat control bar instead of today's floating pills */
+html[layout^="stargazer"] #movie_player .ytp-chrome-bottom {
+  left: 0 !important; width: 100% !important; padding: 0 8px !important; box-sizing: border-box !important;
+  background: linear-gradient(#5a5a5a, #2b2b2b 45%, #111 55%, #000) !important;
+  border-top: 1px solid #777 !important;
+}
+html[layout^="stargazer"] #movie_player .ytp-gradient-bottom { display: none !important; }
+html[layout^="stargazer"] #movie_player .ytp-play-button,
+html[layout^="stargazer"] #movie_player .ytp-volume-area,
+html[layout^="stargazer"] #movie_player .ytp-time-wrapper,
+html[layout^="stargazer"] #movie_player .ytp-chapter-title,
+html[layout^="stargazer"] #movie_player .ytp-right-controls {
+  background: none !important; border-radius: 0 !important; box-shadow: none !important;
+  backdrop-filter: none !important;
+}
+html[layout^="stargazer"] #movie_player .ytp-play-progress {
+  background: #e00 !important;
+}
+html[layout^="stargazer"] #movie_player .ytp-time-display,
+html[layout^="stargazer"] #movie_player .ytp-time-contents {
+  font: 11px Arial, Helvetica, sans-serif !important; color: #ccc !important;
+  display: inline-flex !important; align-items: center !important; line-height: normal !important;
+  gap: 4px !important;
+}
+html[layout^="stargazer"] #movie_player .ytp-time-wrapper { display: inline-flex !important; align-items: center !important; height: 40px !important; }
+
+/* Like / Dislike / Share / Save under the video: 2008-style square grey buttons with
+   words (CustomTube hides their icons, which today's YouTube draws differently) */
+html[layout^="stargazer"] ytd-watch-flexy ytd-menu-renderer yt-light-shape { display: none !important; }
+html[layout^="stargazer"] #top-level-buttons-computed button,
+html[layout^="stargazer"] ytd-watch-flexy ytd-menu-renderer #button-shape button,
+html[layout^="stargazer"] ytd-watch-flexy ytd-menu-renderer > yt-button-shape button {
+  border-radius: 3px !important; border: 1px solid #b5b5b5 !important; box-shadow: none !important;
+  background: linear-gradient(#fdfdfd, #e3e3e8) !important; color: #000 !important;
+  height: 24px !important; width: auto !important; min-width: 0 !important; max-width: none !important;
+  padding: 0 8px !important; margin-right: 4px !important;
+  font: 12px Arial, Helvetica, sans-serif !important;
+}
+html[layout^="stargazer"] #top-level-buttons-computed button:hover { background: #d0d0d7 !important; }
+html[layout^="stargazer"] #top-level-buttons-computed .ytSpecButtonShapeNextIcon { display: none !important; }
+html[layout^="stargazer"] #top-level-buttons-computed like-button-view-model button::before { content: "Like"; margin-right: 4px; }
+html[layout^="stargazer"] #top-level-buttons-computed dislike-button-view-model button::before { content: "Dislike"; }
+html[layout^="stargazer"] #top-level-buttons-computed button[aria-label^="Share"]::before { content: "Share"; }
+html[layout^="stargazer"] #top-level-buttons-computed button[aria-label^="Save"]::before { content: "Save"; }
+html[layout^="stargazer"] #top-level-buttons-computed button[aria-label^="More actions"] .ytSpecButtonShapeNextIcon { display: inline-flex !important; }
+
 } /* end kali-looks YouTube 2008 */

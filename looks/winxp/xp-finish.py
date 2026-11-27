@@ -8,6 +8,7 @@ Every change is idempotent (marked "kali-looks") and only touches the XP look:
 XPlasma's own widgets in ~/.local/share/plasma and the XP look's config folder.
 """
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -370,6 +371,9 @@ IE6_ADDONS = {
     # Violentmonkey (MIT): runs the old-Google userscript
     "{aecec67f-0d10-4fa7-b7c7-609a2db280cf}": "violentmonkey",
 }
+# Tried and taken out: PlayerTube's 2006/2010 players come out scrambled on
+# YouTube's 2025 ("delhi") player; ie6-youtube-2008.css restyles the player instead.
+IE6_BLOCKED = ["{925b0516-774d-469d-bb0e-2b94f199b29a}"]
 
 
 def ie6_browser(cfg):
@@ -391,6 +395,8 @@ def ie6_browser(cfg):
         guid: {"installation_mode": "normal_installed",
                "install_url": f"https://addons.mozilla.org/firefox/downloads/latest/{slug}/latest.xpi"}
         for guid, slug in IE6_ADDONS.items()}}}
+    for guid in IE6_BLOCKED:
+        policies["policies"]["ExtensionSettings"][guid] = {"installation_mode": "blocked"}
     # Websites in light mode, as every site was in XP's day.
     user_js = IE6 / "profile/user.js"
     if user_js.exists():
@@ -416,6 +422,53 @@ def ie6_browser(cfg):
         log("IE6 browser: add-ons and no self-updates set")
 
 
+def ie6_title():
+    """The IE6 browser's window title as IE6 wrote it: "Google - Microsoft Internet
+    Explorer" instead of "Google — Mozilla Firefox". Two strings in its own copy of
+    Firefox (browser/omni.ja), patched once; the original is kept beside it."""
+    omni = IE6 / "firefox/browser/omni.ja"
+    if not omni.exists() or not shutil.which("zip") or not shutil.which("unzip"):
+        return
+    ftl, js = "localization/en-US/browser/browser.ftl", "chrome/browser/content/browser/tabbrowser/tabbrowser.js"
+    read = lambda name: subprocess.run(["unzip", "-p", str(omni), name], capture_output=True).stdout.decode()
+    title_line = "browser-main-window-default-title = Microsoft Internet Explorer"
+    if title_line in read(ftl):
+        return
+    import tempfile
+    with tempfile.TemporaryDirectory(prefix="ie6-omni-") as tmp:
+        subprocess.run(["unzip", "-q", "-o", str(omni), ftl, js, "-d", tmp], capture_output=True)
+        f, j = Path(tmp) / ftl, Path(tmp) / js
+        if not f.exists() or not j.exists():
+            log("IE6 title: strings not found, left as it is")
+            return
+        ftext, jtext = f.read_text(), j.read_text()
+        old_title = "browser-main-window-default-title = { -brand-full-name }"
+        old_join = 'return parts.filter(p => !!p).join(" \u2014 ");'
+        if old_title not in ftext or old_join not in jtext:
+            log("IE6 title: this Firefox writes its title differently, left as it is")
+            return
+        f.write_text(ftext.replace(old_title, title_line))
+        j.write_text(jtext.replace(old_join, 'return parts.filter(p => !!p).join(" - ");  // kali-looks: IE6'))
+        backup = omni.with_name("omni.ja.kali-looks-orig")
+        if not backup.exists():
+            shutil.copy2(omni, backup)
+        # zip -f/-u can't rewrite Mozilla's optimized jar in place: update a plain copy
+        work = Path(tmp) / "omni.ja"
+        subprocess.run(["unzip", "-q", str(omni), "-d", str(Path(tmp) / "x")], capture_output=True)
+        for rel in (ftl, js):
+            dst = Path(tmp) / "x" / rel
+            dst.write_bytes((Path(tmp) / rel).read_bytes())
+        r = subprocess.run(["zip", "-q", "-r", "-9", "-X", "-D", str(work), "."], cwd=Path(tmp) / "x")
+        if r.returncode != 0 or not work.exists():
+            log("IE6 title: couldn't repack, left as it is")
+            return
+        staged = omni.with_name("omni.ja.kali-looks-new")
+        shutil.copy2(work, staged)
+        os.replace(staged, omni)  # a running browser keeps the old file open
+    shutil.rmtree(IE6 / "profile/startupCache", ignore_errors=True)
+    log("IE6 browser: window title now reads \"… - Microsoft Internet Explorer\"")
+
+
 def main():
     args = sys.argv[1:]
     if args and args[0] == "--live":
@@ -434,6 +487,7 @@ def main():
     programs_menus()
     session_config(cfg)
     ie6_browser(cfg)
+    ie6_title()
 
 
 if __name__ == "__main__":
