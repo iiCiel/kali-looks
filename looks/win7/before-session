@@ -1,0 +1,4 @@
+#!/bin/sh
+# kali-looks: runs before the Windows 7 session starts (Plasma isn't up yet).
+# $1 = this look's config folder.
+exec python3 "$(dirname "$(readlink -f "$0")")/w7-finish.py" "$1"

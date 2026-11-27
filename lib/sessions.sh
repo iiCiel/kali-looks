@@ -148,46 +148,84 @@ swap_home_files() { # swap_home_files <from-look> <to-look>
 # Files a look puts in your shared ~/.local/share that would change the others too: a
 # replacement for Plasma's own desktop (Windows XP's right-click menu and lock screen in
 # every Plasma look), KWin's title bars, launchers that take over another app's name
-# (XP's "firefox-esr" opening Internet Explorer from your Mac's links). Each is kept in
+# (XP's "firefox-esr" opening Internet Explorer from your Mac's links), and the desktop
+# shortcuts XP puts on your Desktop (My Computer... with XP's icons), and KDE's activity
+# database (each Plasma look's Start-menu pins and most-used programs), and the Windows
+# looks' names for programs (Calculator, Command Prompt...). Each is kept in
 # its look's folder and linked into place only while that look runs.
-declare -A LOOK_FILES=(
-  [winxp]=".local/share/plasma/plasmoids/org.kde.desktopcontainment
-           .local/share/plasma/shells/org.kde.plasma.desktop
-           .local/share/kwin/aurorae/aurorae.qml
-           .local/share/wallpapers/xp-bliss
-           .local/share/applications/firefox-esr.desktop
-           .local/share/applications/firefox-esr-ie6.desktop
-           .local/share/applications/xp-show-desktop.desktop
-           .local/share/applications/fyi.hotsocket.xplasma.desktop
-           .local/share/applications/fyi.hotsocket.xplasma.datetime.desktop
-           .local/share/applications/kde-xp-suite.desktop"
-  [macos]=".local/share/applications/mac-tahoe-clipboard.desktop
-           .local/share/applications/org.kde.mac-tahoe-liquid-kde.apps.desktop
-           .local/share/applications/org.kde.mac-tahoe-liquid-kde.settings.desktop"
-  [base]=".local/share/applications/cupertino-launchpad.desktop
-          .local/share/applications/launchpad.desktop
-          .local/share/applications/org.xfce.xfdesktop.desktop
-          .local/share/applications/xfdesktop.desktop"
-)
-swap_look_files() { # swap_look_files <look now starting>
-  local look=$1 owner rel p store
-  for owner in "${!LOOK_FILES[@]}"; do
-    for rel in ${LOOK_FILES[$owner]}; do
-      p="$HOME/$rel"; store="$CFG_ROOT/$owner/.home/$rel"
-      # a real one there (its look installed or rewrote it) goes to its look's folder
-      if [[ -e $p || -L $p ]] && ! [[ -L $p && $(readlink "$p") == "$CFG_ROOT"/* ]]; then
-        mkdir -p "$(dirname "$store")"
-        if [[ -e $store || -L $store ]]; then
-          mkdir -p "$DATA_DIR/backup/look-files"; rm -rf "$DATA_DIR/backup/look-files/${rel//\//_}"
-          mv -T "$store" "$DATA_DIR/backup/look-files/${rel//\//_}"
-        fi
-        mv -T "$p" "$store"
+# look|path (from your home). A path several looks list is a different file in each.
+LOOK_FILES_TABLE='
+winxp|.local/share/plasma/plasmoids/org.kde.desktopcontainment
+winxp|.local/share/plasma/shells/org.kde.plasma.desktop
+winxp|.local/share/kwin/aurorae/aurorae.qml
+winxp|.local/share/wallpapers/xp-bliss
+winxp|.local/share/applications/firefox-esr.desktop
+winxp|.local/share/applications/firefox-esr-ie6.desktop
+winxp|.local/share/applications/xp-show-desktop.desktop
+winxp|.local/share/applications/fyi.hotsocket.xplasma.desktop
+winxp|.local/share/applications/fyi.hotsocket.xplasma.datetime.desktop
+winxp|.local/share/applications/kde-xp-suite.desktop
+winxp|Desktop/My Computer.desktop
+winxp|Desktop/My Documents.desktop
+winxp|Desktop/My Network Places.desktop
+winxp|Desktop/Internet Explorer.desktop
+winxp|Desktop/Recycle Bin.desktop
+win7|Desktop/Recycle Bin.desktop
+winxp|.local/share/applications/org.kde.dolphin.desktop
+win7|.local/share/applications/org.kde.dolphin.desktop
+winxp|.local/share/applications/org.kde.konsole.desktop
+win7|.local/share/applications/org.kde.konsole.desktop
+winxp|.local/share/applications/org.kde.kcalc.desktop
+win7|.local/share/applications/org.kde.kcalc.desktop
+winxp|.local/share/applications/org.kde.spectacle.desktop
+win7|.local/share/applications/org.kde.spectacle.desktop
+winxp|.local/share/applications/org.kde.dragonplayer.desktop
+win7|.local/share/applications/org.kde.dragonplayer.desktop
+winxp|.local/share/applications/org.xfce.mousepad.desktop
+win7|.local/share/applications/org.xfce.mousepad.desktop
+winxp|.local/share/applications/org.kde.plasma-systemmonitor.desktop
+win7|.local/share/applications/org.kde.plasma-systemmonitor.desktop
+base|.local/share/kactivitymanagerd
+winxp|.local/share/kactivitymanagerd
+win7|.local/share/kactivitymanagerd
+macos|.local/share/kactivitymanagerd
+plasma|.local/share/kactivitymanagerd
+win7|.local/share/wallpapers/kali-looks-aero
+macos|.local/share/applications/mac-tahoe-clipboard.desktop
+macos|.local/share/applications/org.kde.mac-tahoe-liquid-kde.apps.desktop
+macos|.local/share/applications/org.kde.mac-tahoe-liquid-kde.settings.desktop
+base|.local/share/applications/cupertino-launchpad.desktop
+base|.local/share/applications/launchpad.desktop
+base|.local/share/applications/org.xfce.xfdesktop.desktop
+base|.local/share/applications/xfdesktop.desktop
+'
+swap_look_files() { # swap_look_files <look now starting> [<look before>]
+  local look=$1 prev=${2:-} rel owners owner p store keep line
+  local -A by_path=()
+  while IFS= read -r line; do
+    [[ $line == *"|"* ]] || continue
+    by_path[${line#*|}]+="${line%%|*} "
+  done <<<"$LOOK_FILES_TABLE"
+  for rel in "${!by_path[@]}"; do
+    owners=${by_path[$rel]}; p="$HOME/$rel"
+    # a real one there (its look installed or rewrote it) goes to its look's folder:
+    # the look that just ran, if it's one of the owners, else the first owner
+    if [[ -e $p || -L $p ]] && ! [[ -L $p && $(readlink "$p") == "$CFG_ROOT"/* ]]; then
+      keep=${owners%% *}
+      [[ -n $prev && " $owners" == *" $prev "* ]] && keep=$prev
+      store="$CFG_ROOT/$keep/.home/$rel"
+      mkdir -p "$(dirname "$store")"
+      if [[ -e $store || -L $store ]]; then
+        mkdir -p "$DATA_DIR/backup/look-files"; rm -rf "$DATA_DIR/backup/look-files/$keep-${rel//\//_}"
+        mv -T "$store" "$DATA_DIR/backup/look-files/$keep-${rel//\//_}"
       fi
-      [[ -L $p ]] && rm -f "$p"
-      if [[ $owner == "$look" && ( -e $store || -L $store ) ]]; then
-        mkdir -p "$(dirname "$p")"; ln -sT "$store" "$p"
-      fi
-    done
+      mv -T "$p" "$store"
+    fi
+    [[ -L $p ]] && rm -f "$p"
+    store="$CFG_ROOT/$look/.home/$rel"
+    if [[ " $owners" == *" $look "* && ( -e $store || -L $store ) ]]; then
+      mkdir -p "$(dirname "$p")"; ln -sT "$store" "$p"
+    fi
   done
 }
 
@@ -255,7 +293,7 @@ cmd_session_hook() {
     stop_config_daemons
     point_config "$target" && ok=1
     swap_home_files "$prev" "$look" || echo "warning: couldn't swap the pointer/GTK2 files"
-    swap_look_files "$look"
+    swap_look_files "$look" "$prev"
     state_set ACTIVE "$look"
     fix_polkit_agent
     look_only_autostart "$look" "$target"

@@ -308,8 +308,10 @@ X-KaliLooks=winxp
 
 # ---- live: pinned programs as XP had them ------------------------------------------
 
-def pinned_programs():
-    stamp = DATA / "winxp-pins.done"
+def set_favorites(want, stamp_name, label):
+    """The Start menu's pinned programs (Plasma keeps them in KDE's activity database,
+    one per look since kali-looks 0.4): set once to the given list."""
+    stamp = DATA / stamp_name
     if stamp.exists():
         return
     agent, activity = "org.kde.plasma.favorites.applications", ":global"
@@ -323,11 +325,6 @@ def pinned_programs():
     except Exception as e:
         log(f"couldn't read favourites ({e}); left as they are")
         return
-    want = ["preferred://browser"]
-    for app in ["thunderbird.desktop", "org.kde.kmail2.desktop", "org.gnome.Evolution.desktop"]:
-        if (Path("/usr/share/applications") / app).exists():
-            want.append("applications:" + app)
-            break
 
     def call(method, res):
         return subprocess.run(
@@ -336,7 +333,7 @@ def pinned_programs():
              f"org.kde.ActivityManager.ResourcesLinking.{method}", agent, res, activity],
             capture_output=True, text=True)
 
-    (DATA / "winxp-pins-before.json").write_text(json.dumps(have, indent=1))
+    (DATA / stamp_name.replace(".done", "-before.json")).write_text(json.dumps(have, indent=1))
     for res in have:
         if res not in want:
             call("UnlinkResourceFromActivity", res)
@@ -344,20 +341,18 @@ def pinned_programs():
         if res not in have:
             call("LinkResourceToActivity", res)
     stamp.write_text("pinned: " + ", ".join(want) + "\n")
-    log("Start menu pins set to " + ", ".join(want) + " (old list in winxp-pins-before.json)")
+    log(f"{label} Start menu pins set to " + (", ".join(want) or "nothing"))
 
 
-def most_used_programs():
-    """XP's Start menu lists the programs you use most. KDE only counts programs
-    started from its menus, so on a new look the list is empty: start it with
-    programs that are installed here (once; real use takes over from there)."""
-    stamp = DATA / "winxp-mfu.done"
+def seed_most_used(candidates, stamp_name, label):
+    """The Start menu's most-used list: KDE only counts programs started from its
+    menus, so on a new look it's empty. Start it with installed programs (once; real
+    use takes over from there)."""
+    stamp = DATA / stamp_name
     if stamp.exists():
         return
     apps = Path("/usr/share/applications")
-    picks = [a for a in ["com.anthropic.Claude.desktop", "org.kde.konsole.desktop",
-                         "org.kde.dolphin.desktop", "org.kde.kate.desktop", "discord.desktop",
-                         "org.kde.plasma-systemmonitor.desktop"] if (apps / a).exists()]
+    picks = [a for a in candidates if (apps / a).exists()]
     for app in reversed(picks):  # the last one counted comes first
         subprocess.run(["gdbus", "call", "--session", "-d", "org.kde.ActivityManager", "-o",
                         "/ActivityManager/Resources", "-m",
@@ -365,7 +360,64 @@ def most_used_programs():
                         "org.kde.plasma.kicker", "0", "applications:" + app, "0"],
                        capture_output=True, text=True)
     stamp.write_text("\n".join(picks) + "\n")
-    log("most-used list started with " + ", ".join(picks))
+    log(f"{label} most-used list started with " + ", ".join(picks))
+
+
+# Programs under the names Windows gave its own (both Windows looks).
+WINDOWS_NAMES = {
+    "org.kde.dolphin.desktop": "Windows Explorer",
+    "org.kde.konsole.desktop": "Command Prompt",
+    "org.kde.kcalc.desktop": "Calculator",
+    "org.kde.spectacle.desktop": "Snipping Tool",
+    "org.kde.dragonplayer.desktop": "Windows Media Player",
+    "org.xfce.mousepad.desktop": "Notepad",
+    "org.kde.plasma-systemmonitor.desktop": "Task Manager",
+}
+
+
+def windows_names(names=WINDOWS_NAMES, skip=()):
+    """Copies of the programs' launchers with Windows' names, in your
+    ~/.local/share/applications; kali-looks links them in only while a Windows look
+    runs (LOOK_FILES_TABLE in lib/sessions.sh), so other looks keep KDE's names."""
+    for app, name in names.items():
+        src = Path("/usr/share/applications") / app
+        if app in skip or not src.exists():
+            continue
+        out = []
+        section = None
+        for line in src.read_text().splitlines():
+            if line.startswith("["):
+                section = line
+            if section == "[Desktop Entry]" and (line.startswith("Name=") or line.startswith("Name[")):
+                if line.startswith("Name="):
+                    out.append("Name=" + name)
+                continue
+            if section == "[Desktop Entry]" and line.startswith("GenericName"):
+                continue
+            out.append(line)
+            if line == "[Desktop Entry]":
+                out.append("X-KaliLooks=windows-name")
+        dest = HOME / ".local/share/applications" / app
+        text = "\n".join(out) + "\n"
+        if dest.is_symlink() or not dest.exists() or "X-KaliLooks=windows-name" in dest.read_text():
+            if not dest.exists() or dest.read_text() != text:
+                dest.write_text(text)
+
+
+def pinned_programs():
+    """XP's Start menu pins: Internet and E-mail."""
+    want = ["preferred://browser"]
+    for app in ["thunderbird.desktop", "org.kde.kmail2.desktop", "org.gnome.Evolution.desktop"]:
+        if (Path("/usr/share/applications") / app).exists():
+            want.append("applications:" + app)
+            break
+    set_favorites(want, "winxp-pins.done", "XP")
+
+
+def most_used_programs():
+    seed_most_used(["com.anthropic.Claude.desktop", "org.kde.konsole.desktop", "org.kde.dolphin.desktop",
+                    "org.kde.kate.desktop", "discord.desktop", "org.kde.plasma-systemmonitor.desktop"],
+                   "winxp-mfu.done", "XP")
 
 
 IE6 = HOME / ".local/share/firefox-esr-ie6"
@@ -521,13 +573,13 @@ def widget_fixes():
     return changed
 
 
-def screen_scale(cfg):
+def screen_scale(cfg, stamp_name="winxp-scale.auto"):
     """XP was drawn for 96 dpi. On a high-resolution panel (this laptop: 1920x1200
     on 14", about 160 dpi) XP's 8 pt Tahoma is tiny, so the XP session is scaled
     to the panel: its dpi / 96, rounded down to a quarter (160 dpi -> 150%).
     Left alone once you set a scale yourself in Display settings."""
     import math
-    stamp = DATA / "winxp-scale.auto"
+    stamp = DATA / stamp_name
     glob = cfg / "kdeglobals"
     text = glob.read_text() if glob.exists() else ""
     m = re.search(r"^\[KScreen\]\n(?:(?!\[).*\n)*?ScaleFactor=([0-9.]+)", text, re.M)
@@ -579,13 +631,14 @@ def plasma_script(path):
     return out
 
 
-def screens_live():
+def screens_live(script=None, stamp_name="winxp-scale.auto"):
     """Every screen gets an XP taskbar and the XP wallpaper, at the session's scale
-    (screens.js). Runs at login and whenever screens are plugged in or rearranged."""
+    (screens.js). Runs at login and whenever screens are plugged in or rearranged.
+    (Windows 7 runs it too, with its own script.)"""
     cfg = HOME / ".config"
     glob = cfg / "kdeglobals"
     before = glob.read_text() if glob.exists() else ""
-    screen_scale(cfg)
+    screen_scale(cfg, stamp_name)
     after = glob.read_text() if glob.exists() else ""
     m = re.search(r"^ScreenScaleFactors=(.*)$", after, re.M)
     if after != before and m:
@@ -604,7 +657,7 @@ def screens_live():
             time.sleep(15 - age)
         else:
             time.sleep(1)
-    out = plasma_script(HERE / "screens.js")
+    out = plasma_script(script or HERE / "screens.js")
     if out:
         log(out)
 
@@ -685,6 +738,7 @@ def main():
     widget_fixes()
     session_config(cfg)
     default_wallpaper(cfg)
+    windows_names(skip=("org.kde.spectacle.desktop",))  # (XP had no Snipping Tool)
     screen_scale(cfg)
     refresh_watcher(cfg)
     ie6_browser(cfg)
