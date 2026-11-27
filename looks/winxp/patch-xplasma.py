@@ -46,6 +46,50 @@ TAR_FIXES = [
     });"""),
 ]
 
+# Display Properties' Settings tab (screen resolution and monitor arrangement), as in XP:
+# xp-settings-tab.cpp, added to XPlasma Plus Properties ahead of the dialog's own code.
+_tab = (Path(__file__).resolve().parent / "xp-settings-tab.cpp").read_text()
+TAB_INCLUDES = "".join(l + "\n" for l in _tab.splitlines() if l.startswith("#include"))
+TAB_CODE = "".join(l + "\n" for l in _tab.splitlines() if not l.startswith("#include"))
+DP = "xplasma/src/app/editor/displayproperties.cpp"
+SRC = "source/xplasma-source.tar.gz"
+TAR_FIXES += [
+    (SRC, DP, "#include <QVBoxLayout>\n", "#include <QVBoxLayout>\n" + TAB_INCLUDES),
+    (SRC, DP, "} // namespace\n\nDisplayProperties::DisplayProperties(QWidget *parent)",
+     "} // namespace\n\n" + TAB_CODE + "DisplayProperties::DisplayProperties(QWidget *parent)"),
+    (SRC, DP, '    m_tabs->addTab(appearanceTab(), QStringLiteral("Appearance"));\n',
+     '    m_tabs->addTab(appearanceTab(), QStringLiteral("Appearance"));\n'
+     '    m_xpSettings = new XpSettingsTab; // kali-looks: XP\'s Settings tab\n'
+     '    m_xpSettings->changed = [this] { updateApply(); };\n'
+     '    m_tabs->addTab(m_xpSettings, QStringLiteral("Settings"));\n'
+     '    m_tabs->setUsesScrollButtons(false); // every tab in sight, as in XP\n'),
+    (SRC, DP, "|| m_hidpiStart->isChecked() != m_appliedHiDpiStart);",
+     "|| m_hidpiStart->isChecked() != m_appliedHiDpiStart || (m_xpSettings && m_xpSettings->pending()));"),
+    (SRC, DP, "    const Look l = look();\n    const Wallpaper desktop = wallpaper();\n    // Shift: everything",
+     "    if (m_xpSettings && !m_xpSettings->apply()) // kali-looks\n        return false;\n"
+     "    const Look l = look();\n    const Wallpaper desktop = wallpaper();\n    // Shift: everything"),
+    (SRC, "xplasma/src/app/editor/displayproperties.h", "    SoundsTab *m_sounds;\n",
+     "    SoundsTab *m_sounds;\n    class XpSettingsTab *m_xpSettings = nullptr; // kali-looks\n"),
+    (SRC, "xplasma/src/app/editor/main.cpp",
+     "    parser.addOption(soundsOption);\n",
+     "    parser.addOption(soundsOption);\n"
+     "    const QCommandLineOption settingsOption(QStringLiteral(\"settings\"), QStringLiteral(\"XPlasma Plus Properties, on its Settings tab.\")); // kali-looks\n"
+     "    parser.addOption(settingsOption);\n"),
+    (SRC, "xplasma/src/app/editor/main.cpp",
+     "        dialog.showTab(QStringLiteral(\"Sounds\"));\n",
+     "        dialog.showTab(QStringLiteral(\"Sounds\"));\n"
+     "    if (parser.isSet(settingsOption)) // kali-looks\n        dialog.showTab(QStringLiteral(\"Settings\"));\n"),
+]
+
+
+def patch_text(text, old, new, where):
+    """One fix to a file's text: unchanged if it's already there."""
+    if new in text:
+        return text
+    if text.count(old) != 1:
+        sys.exit(f"patch-xplasma: expected code not found in {where}")
+    return text.replace(old, new)
+
 
 def patch_tar(archive, member, old, new):
     import io

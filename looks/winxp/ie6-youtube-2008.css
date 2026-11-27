@@ -128,4 +128,109 @@ html[layout^="stargazer"] #top-level-buttons-computed button[aria-label^="Share"
 html[layout^="stargazer"] #top-level-buttons-computed button[aria-label^="Save"]::before { content: "Save"; }
 html[layout^="stargazer"] #top-level-buttons-computed button[aria-label^="More actions"] .ytSpecButtonShapeNextIcon { display: inline-flex !important; }
 
+/* Home page: 2008's "Featured Videos" list -- small thumbnail on the left, title and
+   details beside it, one video per row (CustomTube's list styling predates the
+   yt-lockup-view-model tiles YouTube uses now, so they piled on top of each other) */
+html[layout^="stargazer"] ytd-browse[page-subtype="home"] #contents.ytd-rich-grid-renderer {
+  display: block !important; width: 640px !important; max-width: 640px !important;
+  margin-left: 0 !important; padding: 40px 0 0 !important; /* room for "Featured Videos" */
+}
+html[layout^="stargazer"] ytd-browse[page-subtype="home"] ytd-rich-grid-row,
+html[layout^="stargazer"] ytd-browse[page-subtype="home"] ytd-rich-grid-row > #contents { display: contents !important; }
+html[layout^="stargazer"] ytd-browse[page-subtype="home"] #contents.ytd-rich-grid-renderer > ytd-rich-item-renderer.ytd-rich-grid-renderer {
+  display: block !important; width: 100% !important; max-width: none !important; height: auto !important;
+  margin: 0 !important; padding: 8px 0 !important; border-bottom: 1px dotted #ccc !important;
+}
+html[layout^="stargazer"] ytd-browse[page-subtype="home"] ytd-rich-item-renderer #content { height: auto !important; }
+html[layout^="stargazer"] ytd-browse[page-subtype="home"] .ytLockupViewModelHost {
+  display: flex !important; flex-direction: row !important; align-items: flex-start !important;
+  width: 100% !important; height: auto !important;
+}
+html[layout^="stargazer"] ytd-browse[page-subtype="home"] .ytLockupViewModelHost > yt-touch-feedback-shape,
+html[layout^="stargazer"] ytd-browse[page-subtype="home"] yt-interaction,
+html[layout^="stargazer"] ytd-browse[page-subtype="home"] .ytLockupMetadataViewModelAvatar,
+html[layout^="stargazer"] ytd-browse[page-subtype="home"] .ytLockupMetadataViewModelMenuButton { display: none !important; }
+html[layout^="stargazer"] ytd-browse[page-subtype="home"] a.ytLockupViewModelContentImage {
+  flex: none !important; width: 120px !important; min-width: 120px !important; max-width: 120px !important;
+  height: 90px !important; margin: 0 10px 0 0 !important; padding: 2px !important;
+  border: 1px solid #999 !important; background: #fff !important; border-radius: 0 !important;
+  box-sizing: content-box !important; overflow: hidden !important; position: relative !important;
+  aspect-ratio: auto !important;
+}
+html[layout^="stargazer"] ytd-browse[page-subtype="home"] a.ytLockupViewModelContentImage yt-thumbnail-bottom-overlay-view-model {
+  position: absolute !important; left: 0 !important; right: 0 !important; bottom: 0 !important; height: auto !important;
+}
+html[layout^="stargazer"] ytd-browse[page-subtype="home"] a.ytLockupViewModelContentImage .ytThumbnailBottomOverlayViewModelBadgeContainer {
+  padding: 0 2px 2px 0 !important; height: auto !important; justify-content: flex-end !important;
+}
+html[layout^="stargazer"] ytd-browse[page-subtype="home"] a.ytLockupViewModelContentImage yt-thumbnail-view-model,
+html[layout^="stargazer"] ytd-browse[page-subtype="home"] a.ytLockupViewModelContentImage .ytThumbnailViewModelImage {
+  width: 120px !important; height: 90px !important; min-height: 0 !important; max-height: 90px !important;
+  padding: 0 !important; top: 0 !important; left: 0 !important; border-radius: 0 !important; aspect-ratio: auto !important;
+  transform: none !important;
+}
+html[layout^="stargazer"] ytd-browse[page-subtype="home"] a.ytLockupViewModelContentImage img {
+  width: 120px !important; height: 90px !important; object-fit: cover !important; border-radius: 0 !important;
+  position: static !important; margin: 0 !important; transform: none !important;
+}
+html[layout^="stargazer"] ytd-browse[page-subtype="home"] badge-shape {
+  font: bold 11px Arial, Helvetica, sans-serif !important; border-radius: 0 !important;
+  height: auto !important; padding: 0 3px !important; background: rgba(0,0,0,.75) !important;
+}
+html[layout^="stargazer"] ytd-browse[page-subtype="home"] .ytLockupViewModelMetadata {
+  flex: 1 1 auto !important; min-width: 0 !important; width: auto !important; margin: 0 !important; padding: 0 !important;
+}
+html[layout^="stargazer"] ytd-browse[page-subtype="home"] yt-lockup-metadata-view-model { padding: 0 !important; }
+html[layout^="stargazer"] ytd-browse[page-subtype="home"] .ytLockupMetadataViewModelTextContainer { padding: 0 !important; width: 100% !important; }
+html[layout^="stargazer"] ytd-browse[page-subtype="home"] a.ytLockupMetadataViewModelTitle,
+html[layout^="stargazer"] ytd-browse[page-subtype="home"] a.ytLockupMetadataViewModelTitle span {
+  font: bold 13px/16px Arial, Helvetica, sans-serif !important; color: #03c !important;
+  max-height: none !important; -webkit-line-clamp: 2 !important; overflow: hidden !important;
+  white-space: normal !important; text-decoration: none !important;
+}
+html[layout^="stargazer"] ytd-browse[page-subtype="home"] a.ytLockupMetadataViewModelTitle:hover span { text-decoration: underline !important; }
+html[layout^="stargazer"] ytd-browse[page-subtype="home"] .ytLockupMetadataViewModelHeadingReset { margin: 0 0 4px !important; height: auto !important; max-height: none !important; }
+html[layout^="stargazer"] ytd-browse[page-subtype="home"] yt-content-metadata-view-model,
+html[layout^="stargazer"] ytd-browse[page-subtype="home"] yt-content-metadata-view-model * {
+  font: 11px/15px Arial, Helvetica, sans-serif !important; color: #666 !important;
+}
+html[layout^="stargazer"] ytd-browse[page-subtype="home"] .ytContentMetadataViewModelMetadataRow { display: block !important; height: auto !important; }
+html[layout^="stargazer"] ytd-browse[page-subtype="home"] yt-content-metadata-view-model a { color: #03c !important; }
+
+/* Ads and today's promos (none of it existed in 2008) */
+html[layout^="stargazer"] #contents.ytd-rich-grid-renderer > ytd-rich-item-renderer.ytd-rich-grid-renderer:has(ytd-ad-slot-renderer),
+html[layout^="stargazer"] #guide [id^="bt-trending-button"],
+html[layout^="stargazer"] ytd-ad-slot-renderer,
+html[layout^="stargazer"] #masthead-ad,
+html[layout^="stargazer"] ytd-banner-promo-renderer,
+html[layout^="stargazer"] ytd-statement-banner-renderer,
+html[layout^="stargazer"] ytd-brand-video-singleton-renderer,
+html[layout^="stargazer"] ytd-primetime-promo-renderer,
+html[layout^="stargazer"] ytd-browse[page-subtype="home"] ytd-rich-section-renderer,
+html[layout^="stargazer"] ytd-browse[page-subtype="home"] #video-preview,
+html[layout^="stargazer"] ytd-video-preview { display: none !important; }
+
+/* Right-hand column: starts below the tabs and search box, beside "Featured Videos" */
+html[layout^="stargazer"] tp-yt-app-drawer#guide { top: calc(var(--bt-topbar-height, 125px) + 16px) !important; }
+html[layout^="stargazer"] ytd-guide-signin-promo-renderer,
+html[layout^="stargazer"] ytd-guide-signin-promo-renderer #description,
+html[layout^="stargazer"] ytd-guide-signin-promo-renderer yt-formatted-string { font: 12px Arial, Helvetica, sans-serif !important; color: #333 !important; padding: 6px 8px !important; }
+html[layout^="stargazer"] ytd-guide-signin-promo-renderer #sign-in-button a,
+html[layout^="stargazer"] ytd-guide-signin-promo-renderer a.ytSpecButtonShapeNextHost {
+  border: 1px solid #9f9fad !important; border-radius: 3px !important; box-shadow: none !important;
+  background: linear-gradient(#fdfdfd, #e3e3e8) !important; color: #000 !important;
+  height: 22px !important; padding: 0 10px !important; margin-top: 6px !important;
+  font: bold 12px Arial, Helvetica, sans-serif !important;
+}
+html[layout^="stargazer"] ytd-guide-signin-promo-renderer .ytSpecButtonShapeNextIcon { display: none !important; }
+html[layout^="stargazer"] ytd-browse[page-subtype="home"] #contents.ytd-rich-grid-renderer::before { width: 630px !important; }
+
+html[layout^="stargazer"] #frosted-glass { display: none !important; }
+/* the few videos YouTube still sends in its older tile (films, mostly) */
+html[layout^="stargazer"] ytd-browse[page-subtype="home"] ytd-rich-grid-media ytd-thumbnail,
+html[layout^="stargazer"] ytd-browse[page-subtype="home"] ytd-rich-grid-media div#thumbnail {
+  width: 148px !important; min-width: 148px !important; max-width: 148px !important; flex: none !important;
+}
+html[layout^="stargazer"] ytd-browse[page-subtype="home"] ytd-rich-grid-media ytd-thumbnail::before { padding-top: 97px !important; }
+html[layout^="stargazer"] ytd-browse[page-subtype="home"] ytd-rich-grid-media #menu { display: none !important; }
 } /* end kali-looks YouTube 2008 */
