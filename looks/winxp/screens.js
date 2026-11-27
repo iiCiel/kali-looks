@@ -99,14 +99,19 @@
   // Wallpaper: screens without one of their own get the main screen's.
   var ds = desktops(), img = "", g = ["Wallpaper", "org.kde.image", "General"];
   for (var d = 0; d < ds.length; d++)
-    if (ds[d].screen == main.screen && ds[d].wallpaperPlugin == "org.kde.image") { ds[d].currentConfigGroup = g; img = ds[d].readConfig("Image"); }
+    if (ds[d].screen == main.screen && ds[d].wallpaperPlugin == "org.kde.image") {
+      ds[d].currentConfigGroup = g; img = ds[d].readConfig("Image");
+      var fill = ds[d].readConfig("FillMode"), color = ds[d].readConfig("Color");
+    }
   var filled = 0;
   if (img != "") for (var e = 0; e < ds.length; e++) {
     var dd = ds[e];
     if (dd.wallpaperPlugin != "org.kde.image") continue;
     dd.currentConfigGroup = g;
     var cur = dd.readConfig("Image");
-    if (cur == "" || cur.indexOf("/usr/share/wallpapers/") >= 0) { dd.writeConfig("Image", img); filled++; }
+    if (cur == "" || cur.indexOf("/usr/share/wallpapers/") >= 0 || cur.indexOf("kali-looks/wallpapers/") >= 0) {
+      dd.writeConfig("Image", img); dd.writeConfig("FillMode", fill); dd.writeConfig("Color", color); dd.reloadConfig(); filled++;
+    }
   }
   print("taskbars added: " + added + ", extra taskbars removed: " + removed + ", wallpapers set: " + filled);
 })();

@@ -145,6 +145,52 @@ swap_home_files() { # swap_home_files <from-look> <to-look>
   done
 }
 
+# Files a look puts in your shared ~/.local/share that would change the others too: a
+# replacement for Plasma's own desktop (Windows XP's right-click menu and lock screen in
+# every Plasma look), KWin's title bars, launchers that take over another app's name
+# (XP's "firefox-esr" opening Internet Explorer from your Mac's links). Each is kept in
+# its look's folder and linked into place only while that look runs.
+declare -A LOOK_FILES=(
+  [winxp]=".local/share/plasma/plasmoids/org.kde.desktopcontainment
+           .local/share/plasma/shells/org.kde.plasma.desktop
+           .local/share/kwin/aurorae/aurorae.qml
+           .local/share/wallpapers/xp-bliss
+           .local/share/applications/firefox-esr.desktop
+           .local/share/applications/firefox-esr-ie6.desktop
+           .local/share/applications/xp-show-desktop.desktop
+           .local/share/applications/fyi.hotsocket.xplasma.desktop
+           .local/share/applications/fyi.hotsocket.xplasma.datetime.desktop
+           .local/share/applications/kde-xp-suite.desktop"
+  [macos]=".local/share/applications/mac-tahoe-clipboard.desktop
+           .local/share/applications/org.kde.mac-tahoe-liquid-kde.apps.desktop
+           .local/share/applications/org.kde.mac-tahoe-liquid-kde.settings.desktop"
+  [base]=".local/share/applications/cupertino-launchpad.desktop
+          .local/share/applications/launchpad.desktop
+          .local/share/applications/org.xfce.xfdesktop.desktop
+          .local/share/applications/xfdesktop.desktop"
+)
+swap_look_files() { # swap_look_files <look now starting>
+  local look=$1 owner rel p store
+  for owner in "${!LOOK_FILES[@]}"; do
+    for rel in ${LOOK_FILES[$owner]}; do
+      p="$HOME/$rel"; store="$CFG_ROOT/$owner/.home/$rel"
+      # a real one there (its look installed or rewrote it) goes to its look's folder
+      if [[ -e $p || -L $p ]] && ! [[ -L $p && $(readlink "$p") == "$CFG_ROOT"/* ]]; then
+        mkdir -p "$(dirname "$store")"
+        if [[ -e $store || -L $store ]]; then
+          mkdir -p "$DATA_DIR/backup/look-files"; rm -rf "$DATA_DIR/backup/look-files/${rel//\//_}"
+          mv -T "$store" "$DATA_DIR/backup/look-files/${rel//\//_}"
+        fi
+        mv -T "$p" "$store"
+      fi
+      [[ -L $p ]] && rm -f "$p"
+      if [[ $owner == "$look" && ( -e $store || -L $store ) ]]; then
+        mkdir -p "$(dirname "$p")"; ln -sT "$store" "$p"
+      fi
+    done
+  done
+}
+
 # One time: KDE sessions that ran before kali-looks 0.2 wrote their settings into your
 # own config. Move them aside (kept in a backup) so Xfce is exactly as it was.
 clean_base_once() {
@@ -204,12 +250,20 @@ cmd_session_hook() {
     fi
     adopt_app_folders
     prev=$(current_look)
+    clear_look_env
+    stop_look_units
     stop_config_daemons
     point_config "$target" && ok=1
     swap_home_files "$prev" "$look" || echo "warning: couldn't swap the pointer/GTK2 files"
+    swap_look_files "$look"
     state_set ACTIVE "$look"
     fix_polkit_agent
+    look_only_autostart "$look" "$target"
+    python3 "$HERE/lib/same-keyring.py" "$target" || true
     systemctl --user daemon-reload 2>/dev/null || true
+    stop_orphan_units
+    # this look's own background units (watchers and the like)
+    systemctl --user start --no-block default.target 2>/dev/null || true
     reset_portals stop
     # A look's screen scale is set again by Plasma at its login; don't let the last
     # session's (e.g. XP's 150%) carry into the next one through systemd.
@@ -256,6 +310,62 @@ restore_session_env() {
 # settings of whichever session started it first, e.g. Chrome Remote Desktop's Xfce
 # at boot. Stop it before a session starts; Plasma looks also restart it once Plasma
 # has published its own settings (looks session-start).
+# --- Each look on its own: nothing of one look running or set in another ---------------
+
+# Variables a look's session start sets that would otherwise stay in the shared systemd
+# environment for the next look: Windows 7's (startatp) gave Windows XP its UAC prompt
+# and desktop shell.
+LOOK_ENV_VARS=(USE_UAC_AGENT PLASMA_DEFAULT_SHELL QML_DISABLE_DISTANCEFIELD)
+clear_look_env() {
+  systemctl --user unset-environment "${LOOK_ENV_VARS[@]}" 2>/dev/null || true
+  systemctl --user set-environment XDG_CONFIG_DIRS=/etc/xdg 2>/dev/null || true
+  # (D-Bus can't unset: empty is "not set" for all of them)
+  dbus-update-activation-environment "${LOOK_ENV_VARS[@]/%/=}" XDG_CONFIG_DIRS=/etc/xdg 2>/dev/null || true
+}
+
+# The last look's background units (they live in its own config folder) stop with it;
+# systemd would otherwise keep them running after their files went away with ~/.config.
+stop_look_units() {
+  local dir u frag
+  dir=$(readlink -f "$HOME/.config/systemd/user" 2>/dev/null) || return 0
+  [[ -d $dir ]] || return 0
+  while read -r u _; do
+    [[ -n $u ]] || continue
+    frag=$(systemctl --user show -p FragmentPath --value "$u" 2>/dev/null)
+    [[ -n $frag && $(readlink -f "$frag") == "$dir"/* ]] && systemctl --user stop "$u" 2>/dev/null && echo "stopped $u"
+  done < <(systemctl --user list-units --plain --no-legend --state=active,activating,waiting 2>/dev/null)
+}
+# ...and any still running whose file is gone (left from before this was done).
+stop_orphan_units() {
+  local u
+  while read -r u _; do
+    [[ -n $u ]] || continue
+    [[ $(systemctl --user show -p LoadState --value "$u" 2>/dev/null) == not-found ]] || continue
+    case $u in *.scope|*.slice) continue ;; esac
+    systemctl --user stop "$u" 2>/dev/null && echo "stopped leftover $u"
+  done < <(systemctl --user list-units --plain --no-legend --state=active,activating,waiting 2>/dev/null)
+}
+
+# Programs a look installs system-wide that start at login in every desktop. Each runs
+# only in its own look (a "Hidden" copy in the others' autostart folders, marked ours).
+declare -A LOOK_ONLY_AUTOSTART=(
+  [win7]="x-atpootb.desktop uac-polkit-agent.desktop"
+)
+look_only_autostart() { # look_only_autostart <look> <its config folder>
+  local look=$1 dir="$2/autostart" owner f
+  for owner in "${!LOOK_ONLY_AUTOSTART[@]}"; do
+    for f in ${LOOK_ONLY_AUTOSTART[$owner]}; do
+      [[ -e /etc/xdg/autostart/$f ]] || continue
+      if [[ $owner == "$look" ]]; then
+        grep -qs '^X-KaliLooks=look-only' "$dir/$f" && rm -f "$dir/$f"
+      elif ! [[ -e $dir/$f ]] || grep -qs '^X-KaliLooks=look-only' "$dir/$f"; then
+        mkdir -p "$dir"
+        printf '[Desktop Entry]\nType=Application\nName=%s\nHidden=true\nX-KaliLooks=look-only\n' "${f%.desktop}" >"$dir/$f"
+      fi
+    done
+  done
+}
+
 # dconf (GSettings) and xfconf (Xfce settings) each run one service for the whole user,
 # outliving the session that started it, with that look's settings in memory. Left
 # running into the next look's session they write the old look's settings into the

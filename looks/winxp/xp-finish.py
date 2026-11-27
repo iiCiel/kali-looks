@@ -380,6 +380,39 @@ IE6_ADDONS = {
 IE6_BLOCKED = ["{925b0516-774d-469d-bb0e-2b94f199b29a}"]
 
 
+def default_wallpaper(cfg):
+    """A desktop Plasma makes on its own (a screen plugged in) starts with Bliss, not
+    Plasma's default: Plasma takes that from the look-and-feel package's "defaults",
+    and XPlasma's session package has none (so Breeze's blue "Next" came through). It
+    names a wallpaper package, found among ~/.local/share/wallpapers (kali-looks keeps
+    this one there only while the XP look runs)."""
+    bliss = HOME / ".local/share/xplasma/assets/wallpapers/Bliss.jpg"
+    if not bliss.exists():
+        return
+    pkg = HOME / ".local/share/wallpapers/xp-bliss"
+    images = pkg / "contents/images"
+    images.mkdir(parents=True, exist_ok=True)
+    img = images / "800x600.jpg"
+    if not img.is_symlink():
+        img.unlink(missing_ok=True)
+        img.symlink_to(bliss)
+    meta = pkg / "metadata.json"
+    if not meta.exists():
+        meta.write_text(json.dumps({"KPlugin": {"Id": "xp-bliss", "Name": "Bliss", "License": "kali-looks"}}, indent=1) + "\n")
+    lnf = None
+    m = re.search(r"^LookAndFeelPackage=(.+)$", (Path(cfg) / "kdeglobals").read_text() if (Path(cfg) / "kdeglobals").exists() else "", re.M)
+    if m:
+        lnf = HOME / ".local/share/plasma/look-and-feel" / m.group(1).strip() / "contents"
+    if lnf and lnf.is_dir():
+        defaults = lnf / "defaults"
+        old = defaults.read_text() if defaults.exists() else ""
+        new = re.sub(r"\[Wallpaper\]\n(?:[^\[\n][^\n]*\n)*", "", old).rstrip("\n")
+        new = (new + "\n\n" if new else "") + "[Wallpaper]\nImage=xp-bliss\n"
+        if new != old:
+            defaults.write_text(new)
+            log("new desktops start with Bliss")
+
+
 def ie6_browser(cfg):
     """XP's browser was Internet Explorer: in this look, links open in XPlasma's IE6
     replica (its own Firefox ESR and profile; your usual Firefox is untouched)."""
@@ -651,6 +684,7 @@ def main():
     show_desktop_launcher()
     widget_fixes()
     session_config(cfg)
+    default_wallpaper(cfg)
     screen_scale(cfg)
     refresh_watcher(cfg)
     ie6_browser(cfg)
