@@ -52,7 +52,7 @@ def patch(path, edits):
 def desktop_menu():
     f = PLASMOIDS / "org.kde.desktopcontainment/contents/ui/FolderViewLayer.qml"
     paste_cmd = f"python3 '{HERE / 'paste-shortcut.py'}'"
-    patch(f, [
+    return patch(f, [
         # labels and visibility, refreshed every time the menu opens
         ("""    function updateContextualActions() {
         folderView.model.updateActions();
@@ -147,7 +147,7 @@ def desktop_menu():
 def start_menu():
     f = PLASMOIDS / "fyi.hotsocket.xplasma.start/contents/ui/XpBackend.qml"
     picture = AVATARS / "xp-chess.png"
-    patch(f, [
+    return patch(f, [
         ("""    readonly property url userPicture: user.faceIconUrl.toString() !== "" ? user.faceIconUrl
                                                                            : (launcher.themeData?.userPicture ?? "")""",
          f"""    // kali-looks: an XP account picture, as XP gave every account one
@@ -198,16 +198,17 @@ def start_menu_width():
     # XP sized the Start menu to its longest entry ("Set Program Access and
     # Defaults" fits); XPlasma's theme fixes it at 380 px and cuts that one off.
     f = PLASMOIDS / "fyi.hotsocket.xplasma.start/contents/ui/XpFullRepresentation.qml"
-    patch(f, [("implicitWidth: root.launcher.themeData.layout.width - frameLeft - frameRight",
-               "implicitWidth: root.launcher.themeData.layout.width + 40 - frameLeft - frameRight  // kali-looks")])
-    patch(PLASMOIDS / "fyi.hotsocket.xplasma.start/contents/ui/StartMenu.qml",
-          [("    width: metrics.width\n", "    width: metrics.width + 40  // kali-looks: room for XP's longest entry\n")])
+    a = patch(f, [("implicitWidth: root.launcher.themeData.layout.width - frameLeft - frameRight",
+               "implicitWidth: root.launcher.themeData.layout.width + 40 + Math.max(0, root.launcher.themeData.font.pixels - 11) * 18 - frameLeft - frameRight  // kali-looks")])
+    b = patch(PLASMOIDS / "fyi.hotsocket.xplasma.start/contents/ui/StartMenu.qml",
+              [("    width: metrics.width\n", "    width: metrics.width + 40 + Math.max(0, themeData.font.pixels - 11) * 18  // kali-looks: room for XP's longest entry (more with Large Fonts)\n")])
+    return a or b
 
 
 def programs_menus():
     # XP's All Programs menus have no title row, and grow to the screen's height
     # instead of scrolling after 17 entries.
-    patch(PLASMOIDS / "fyi.hotsocket.xplasma.start/contents/ui/XpProgramsPopup.qml", [
+    return patch(PLASMOIDS / "fyi.hotsocket.xplasma.start/contents/ui/XpProgramsPopup.qml", [
         ("height: Math.min(420, Math.max(54, entries.count * 24 + 30))",
          "height: Math.min(900, Math.max(30, entries.count * 24 + 7))  // kali-looks"),
         ("""            x: 10; y: 6; width: parent.width - 20
@@ -387,6 +388,13 @@ def ie6_browser(cfg):
             {t: entry + ";" for t in ["text/html", "application/xhtml+xml",
                                        "x-scheme-handler/http", "x-scheme-handler/https"]})
     ini_set(cfg / "kdeglobals", ["General"], {"BrowserApplication": entry})
+    # Its name as XP's Start menu wrote it under "Internet"
+    launcher = APPS / entry
+    if launcher.exists():
+        before = launcher.read_text()
+        ini_set(launcher, ["Desktop Entry"], {"Name": "Internet Explorer", "GenericName": "Web Browser"})
+        if launcher.read_text() != before and shutil.which("kbuildsycoca6"):
+            subprocess.run(["kbuildsycoca6"], capture_output=True)
     # Its add-ons for old YouTube and Google, fetched by Firefox from
     # addons.mozilla.org; and no self-updates that could break the IE6 look.
     dist = IE6 / "firefox/distribution"
@@ -469,8 +477,90 @@ def ie6_title():
     log("IE6 browser: window title now reads \"… - Microsoft Internet Explorer\"")
 
 
+def widget_fixes():
+    """Every fix to XPlasma's widget files; True if any file had to be patched again."""
+    changed = False
+    for fn in (desktop_menu, start_menu, start_menu_width, programs_menus):
+        changed = bool(fn()) or changed
+    return changed
+
+
+def screen_scale(cfg):
+    """XP was drawn for 96 dpi. On a high-resolution panel (this laptop: 1920x1200
+    on 14", about 160 dpi) XP's 8 pt Tahoma is tiny, so the XP session is scaled
+    to the panel: its dpi / 96, rounded down to a quarter (160 dpi -> 150%).
+    Left alone once you set a scale yourself in Display settings."""
+    import math
+    stamp = DATA / "winxp-scale.auto"
+    glob = cfg / "kdeglobals"
+    text = glob.read_text() if glob.exists() else ""
+    m = re.search(r"^\[KScreen\]\n(?:(?!\[).*\n)*?ScaleFactor=([0-9.]+)", text, re.M)
+    current = m.group(1) if m else None
+    if current and (not stamp.exists() or stamp.read_text().strip() != current):
+        return  # chosen in Display settings
+    try:
+        out = subprocess.run(["xrandr", "--query"], capture_output=True, text=True, timeout=10).stdout
+    except (OSError, subprocess.TimeoutExpired):
+        return
+    outputs, dpi = [], 0.0
+    for line in out.splitlines():
+        mm = re.match(r"^(\S+) connected (primary )?(\d+)x(\d+)\+\d+\+\d+.* (\d+)mm x (\d+)mm", line)
+        if not mm:
+            continue
+        name, primary, w, _h, wmm = mm.group(1), mm.group(2), int(mm.group(3)), mm.group(4), int(mm.group(5))
+        outputs.append(name)
+        if wmm > 0 and (primary or not dpi):
+            dpi = w / (wmm / 25.4)
+    if not outputs or not dpi:
+        return
+    scale = max(1.0, min(2.0, math.floor(dpi / 96 * 4) / 4))
+    value = f"{scale:g}"
+    if scale == 1.0:
+        return
+    ini_set(glob, ["KScreen"], {"ScaleFactor": value,
+                                "ScreenScaleFactors": "".join(f"{o}={value};" for o in outputs)})
+    stamp.write_text(value + "\n")
+    log(f"screen scale {int(scale * 100)}% ({dpi:.0f} dpi panel)")
+
+
+def refresh_watcher(cfg):
+    """XPlasma Plus Properties reinstalls its widgets whenever you apply something,
+    which undoes the fixes above: watch for that and put them back."""
+    unit_dir = cfg / "systemd/user"
+    wants = unit_dir / "default.target.wants"
+    wants.mkdir(parents=True, exist_ok=True)
+    plasmoids = "%h/.local/share/plasma/plasmoids"
+    (unit_dir / "kali-looks-xp-refresh.path").write_text(f"""[Unit]
+Description=kali-looks: put the XP fixes back when XPlasma reinstalls its widgets
+
+[Path]
+PathModified={plasmoids}/fyi.hotsocket.xplasma.start/contents/ui
+PathModified={plasmoids}/org.kde.desktopcontainment/contents/ui
+Unit=kali-looks-xp-refresh.service
+
+[Install]
+WantedBy=default.target
+""")
+    (unit_dir / "kali-looks-xp-refresh.service").write_text(f"""[Unit]
+Description=kali-looks: put the XP fixes back on XPlasma's widgets
+
+[Service]
+Type=oneshot
+ExecStartPre=/bin/sleep 4
+ExecStart=/usr/bin/python3 {HERE / 'xp-finish.py'} --refresh
+""")
+    link = wants / "kali-looks-xp-refresh.path"
+    if not link.exists():
+        link.symlink_to("../kali-looks-xp-refresh.path")
+
+
 def main():
     args = sys.argv[1:]
+    if args and args[0] == "--refresh":
+        if widget_fixes():
+            subprocess.run(["systemctl", "--user", "restart", "plasma-plasmashell.service"], check=False)
+            log("XP fixes put back after XPlasma reinstalled its widgets")
+        return
     if args and args[0] == "--live":
         pinned_programs()
         most_used_programs()
@@ -481,11 +571,10 @@ def main():
     src = args[1] if len(args) > 1 else ""
     user_pictures(src)
     show_desktop_launcher()
-    desktop_menu()
-    start_menu()
-    start_menu_width()
-    programs_menus()
+    widget_fixes()
     session_config(cfg)
+    screen_scale(cfg)
+    refresh_watcher(cfg)
     ie6_browser(cfg)
     ie6_title()
 

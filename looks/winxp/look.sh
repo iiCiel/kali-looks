@@ -43,7 +43,7 @@ look_setup() {
   xp_patch
   log "Installing Windows XP into its session (asks for your password; compiling takes ~10 minutes)"
   local rc=0
-  ( cd "$(dirname "$be")" && look_run python3 "$be" install --features="$XP_FEATURES" --theme 'Luna Blue' --tweaks= ) \
+  ( cd "$(dirname "$be")" && look_run python3 "$be" install --features="$XP_FEATURES" --theme 'Luna Blue' --hidpi-icons --hires-wallpapers --tweaks= ) \
     2>&1 | tee "$DATA_DIR/winxp-install.log" || rc=$?
   [[ $rc -eq 0 ]] || die "The XP installer failed; see $DATA_DIR/winxp-install.log"
 }

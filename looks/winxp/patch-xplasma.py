@@ -28,6 +28,53 @@ FIXES = [
      "    for effect in DISABLED:  # kali-looks: live preview only\n        subprocess.run([DBUS, 'org.kde.KWin', '/Effects', 'org.kde.kwin.Effects.unloadEffect', effect], check=False)\n    subprocess.run([DBUS, 'org.kde.KWin', '/Effects', 'org.kde.kwin.Effects.loadEffect', 'fadingpopups'], check=False)"),
 ]
 
+# Fixes inside the XPlasma source archive that the installer compiles from.
+TAR_FIXES = [
+    # Maximized windows kept their title-bar buttons where the window's right edge had
+    # been: KWin 6.7 (X11) can report a maximize before the new width arrives.
+    ("source/xplasma-source.tar.gz", "xplasma/src/decoration/decoration.cpp",
+     """    connect(w, &KDecoration3::DecoratedWindow::sizeChanged, this, layoutAndPaint);
+    connect(w, &KDecoration3::DecoratedWindow::maximizedChanged, this, layoutAndPaint);""",
+     """    connect(w, &KDecoration3::DecoratedWindow::sizeChanged, this, layoutAndPaint);
+    // kali-looks: KWin 6.7 (X11) can report a maximize before the window has its
+    // new width; follow the width itself, and look again once the change settles.
+    connect(w, &KDecoration3::DecoratedWindow::widthChanged, this, layoutAndPaint);
+    connect(w, &KDecoration3::DecoratedWindow::heightChanged, this, layoutAndPaint);
+    connect(w, &KDecoration3::DecoratedWindow::maximizedChanged, this, [this, layoutAndPaint] {
+        layoutAndPaint();
+        QTimer::singleShot(0, this, layoutAndPaint);
+    });"""),
+]
+
+
+def patch_tar(archive, member, old, new):
+    import io
+    import tarfile
+    with tarfile.open(archive) as t:
+        members = [(m, t.extractfile(m).read() if m.isfile() else None) for m in t.getmembers()]
+    changed = False
+    for i, (m, data) in enumerate(members):
+        if m.name != member:
+            continue
+        text = data.decode()
+        if new in text:
+            return False
+        if text.count(old) != 1:
+            sys.exit(f"patch-xplasma: expected code not found in {member}")
+        data = text.replace(old, new).encode()
+        m.size = len(data)
+        members[i] = (m, data)
+        changed = True
+    if not changed:
+        sys.exit(f"patch-xplasma: {member} not in {archive.name}")
+    tmp = archive.with_suffix(".kali-looks.tmp")
+    with tarfile.open(tmp, "w:gz") as t:
+        for m, data in members:
+            t.addfile(m, io.BytesIO(data) if data is not None else None)
+    tmp.replace(archive)
+    return True
+
+
 sums_file = base / "SHA256SUMS.json"
 sums = json.loads(sums_file.read_text())
 for name, old, new in FIXES:
@@ -40,4 +87,8 @@ for name, old, new in FIXES:
     f.write_text(text.replace(old, new))
     if name in sums:
         sums[name] = hashlib.sha256(f.read_bytes()).hexdigest()
+for name, member, old, new in TAR_FIXES:
+    archive = base / name
+    if archive.exists() and patch_tar(archive, member, old, new) and name in sums:
+        sums[name] = hashlib.sha256(archive.read_bytes()).hexdigest()
 sums_file.write_text(json.dumps(sums, indent=2) + "\n")

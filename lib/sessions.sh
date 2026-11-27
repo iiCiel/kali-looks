@@ -209,6 +209,9 @@ cmd_session_hook() {
     state_set ACTIVE "$look"
     systemctl --user daemon-reload 2>/dev/null || true
     reset_portals stop
+    # A look's screen scale is set again by Plasma at its login; don't let the last
+    # session's (e.g. XP's 150%) carry into the next one through systemd.
+    systemctl --user unset-environment QT_SCREEN_SCALE_FACTORS 2>/dev/null || true
     if [[ $look != base ]]; then
       # Kali's Xfce sets QT_QPA_PLATFORMTHEME=qt5ct, and when its desktop ran first
       # (Remote Desktop at boot) that stays behind: KDE then ignores the look's colors
