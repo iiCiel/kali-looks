@@ -15,6 +15,9 @@ import subprocess
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import xp_taskbars  # noqa: E402
+
 HOME = Path.home()
 HERE = Path(__file__).resolve().parent
 PLASMOIDS = HOME / ".local/share/plasma/plasmoids"
@@ -526,17 +529,21 @@ def screen_scale(cfg):
 
 
 def plasma_script(path):
+    """Runs a Plasma desktop script; again while Plasma is still starting (no answer
+    yet, or the script says "not ready": its panels aren't on their screens yet)."""
+    import time
     q = shutil.which("qdbus6") or shutil.which("qdbus")
     if not q:
         return ""
-    for _ in range(30):  # Plasma may still be starting
+    out = ""
+    for _ in range(60):
         r = subprocess.run([q, "org.kde.plasmashell", "/PlasmaShell", "org.kde.PlasmaShell.evaluateScript",
                             Path(path).read_text()], capture_output=True, text=True)
-        if r.returncode == 0:
-            return r.stdout.strip()
-        import time
+        out = r.stdout.strip()
+        if r.returncode == 0 and "not ready" not in out:
+            return out
         time.sleep(1)
-    return ""
+    return out
 
 
 def screens_live():
@@ -552,6 +559,18 @@ def screens_live():
         # a new screen joined: Plasma's own windows take the scale now, apps at next login
         subprocess.run(["systemctl", "--user", "set-environment", f"QT_SCREEN_SCALE_FACTORS={m.group(1)}"], check=False)
         subprocess.run(["systemctl", "--user", "restart", "plasma-plasmashell.service"], check=False)
+    # Plasma puts its taskbars on their screens in the first seconds after it starts:
+    # judging before that, every screen looked bare and got a second taskbar.
+    import time
+    for _ in range(60):
+        age = subprocess.run(["ps", "-o", "etimes=", "-C", "plasmashell"], capture_output=True, text=True).stdout.split()
+        if age:
+            age = min(int(a) for a in age)
+            if age >= 15:
+                break
+            time.sleep(15 - age)
+        else:
+            time.sleep(1)
     out = plasma_script(HERE / "screens.js")
     if out:
         log(out)
@@ -626,6 +645,8 @@ def main():
         sys.exit(__doc__)
     cfg = Path(args[0])
     src = args[1] if len(args) > 1 else ""
+    for change in xp_taskbars.fix(cfg):
+        log(change)
     user_pictures(src)
     show_desktop_launcher()
     widget_fixes()

@@ -204,6 +204,7 @@ cmd_session_hook() {
     fi
     adopt_app_folders
     prev=$(current_look)
+    stop_config_daemons
     point_config "$target" && ok=1
     swap_home_files "$prev" "$look" || echo "warning: couldn't swap the pointer/GTK2 files"
     state_set ACTIVE "$look"
@@ -255,6 +256,21 @@ restore_session_env() {
 # settings of whichever session started it first, e.g. Chrome Remote Desktop's Xfce
 # at boot. Stop it before a session starts; Plasma looks also restart it once Plasma
 # has published its own settings (looks session-start).
+# dconf (GSettings) and xfconf (Xfce settings) each run one service for the whole user,
+# outliving the session that started it, with that look's settings in memory. Left
+# running into the next look's session they write the old look's settings into the
+# new look's files (Windows XP's icons, pointers and fonts in the macOS desktop). Stop
+# them before ~/.config moves: they save to the look they came from, and start again
+# on demand reading the new one.
+stop_config_daemons() {
+  local p i
+  for p in dconf-service xfconfd; do pkill -TERM -u "$(id -u)" -x "$p" 2>/dev/null || true; done
+  for i in 1 2 3 4 5 6 7 8 9 10; do
+    pgrep -u "$(id -u)" -x '(dconf-service|xfconfd)' >/dev/null || break
+    sleep 0.3
+  done
+}
+
 # The password prompt for system actions (turning off while Chrome Remote Desktop's
 # sessions count as "other users logged in", mounting a disk...). AeroShell's install
 # (Windows 7 look) replaces its command with one whose KDE fallback isn't at that path
