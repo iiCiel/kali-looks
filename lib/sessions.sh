@@ -207,6 +207,7 @@ cmd_session_hook() {
     point_config "$target" && ok=1
     swap_home_files "$prev" "$look" || echo "warning: couldn't swap the pointer/GTK2 files"
     state_set ACTIVE "$look"
+    fix_polkit_agent
     systemctl --user daemon-reload 2>/dev/null || true
     reset_portals stop
     # A look's screen scale is set again by Plasma at its login; don't let the last
@@ -254,6 +255,25 @@ restore_session_env() {
 # settings of whichever session started it first, e.g. Chrome Remote Desktop's Xfce
 # at boot. Stop it before a session starts; Plasma looks also restart it once Plasma
 # has published its own settings (looks session-start).
+# The password prompt for system actions (turning off while Chrome Remote Desktop's
+# sessions count as "other users logged in", mounting a disk...). AeroShell's install
+# (Windows 7 look) replaces its command with one whose KDE fallback isn't at that path
+# on Debian/Kali, so no session had a prompt and such actions silently hung. A later
+# drop-in (applied after AeroShell's) runs the right one: AeroShell's own UAC prompt
+# where it asks for it, KDE's everywhere else.
+fix_polkit_agent() {
+  local d="$HOME/.local/share/systemd/user/plasma-polkit-agent.service.d" lib
+  lib="/usr/lib/$(dpkg-architecture -qDEB_HOST_MULTIARCH 2>/dev/null || echo x86_64-linux-gnu)/libexec"
+  [[ -x $lib/polkit-kde-authentication-agent-1 ]] || return 0
+  mkdir -p "$d"
+  cat >"$d/zz-kali-looks.conf" <<EOF
+# kali-looks: see fix_polkit_agent in lib/sessions.sh
+[Service]
+ExecStart=
+ExecStart=/bin/sh -c 'if [ -n "\$USE_UAC_AGENT" ] && [ -x $lib/kf6/uac-polkit-agent ]; then exec $lib/kf6/uac-polkit-agent; else exec $lib/polkit-kde-authentication-agent-1; fi'
+EOF
+}
+
 reset_portals() { # reset_portals stop|restart
   local u=(xdg-desktop-portal.service xdg-desktop-portal-gtk.service xdg-desktop-portal-kde.service)
   if [[ $1 == stop ]]; then systemctl --user stop "${u[@]}" 2>/dev/null || true
