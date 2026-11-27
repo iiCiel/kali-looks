@@ -312,6 +312,7 @@ cmd_session_hook() {
       # and fonts (dark menus, wrong font). KDE uses its own platform theme.
       systemctl --user unset-environment QT_QPA_PLATFORMTHEME 2>/dev/null || true
       install_session_start "$target"
+      ensure_current_activity "$target"
       [[ -x $HERE/looks/$look/before-session ]] && "$HERE/looks/$look/before-session" "$target"
     fi
   } >>"$SESSION_LOG" 2>&1 || true
@@ -402,6 +403,20 @@ look_only_autostart() { # look_only_autostart <look> <its config folder>
       fi
     done
   done
+}
+
+# Plasma's desktops belong to an "activity". With none marked current (KDE's activity
+# service never wrote it down for these looks), Plasma made fresh desktops with its
+# default blue wallpaper instead of the look's own. Mark the look's activity current.
+ensure_current_activity() { # ensure_current_activity <look's config folder>
+  local rc="$1/kactivitymanagerdrc" id
+  [[ -f $rc ]] || return 0
+  grep -q '^currentActivity=.' "$rc" && return 0
+  id=$(awk '/^\[activities\]/{a=1;next} /^\[/{a=0} a&&/=/{sub(/=.*/,"");print;exit}' "$rc")
+  [[ -n $id ]] || return 0
+  kwriteconfig6 --file "$rc" --group main --key currentActivity "$id" 2>/dev/null
+  kwriteconfig6 --file "$rc" --group main --key runningActivities "$id" 2>/dev/null
+  echo "activity $id marked current"
 }
 
 # dconf (GSettings) and xfconf (Xfce settings) each run one service for the whole user,

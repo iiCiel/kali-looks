@@ -1,0 +1,24 @@
+// kali-looks: your desktop's everyday rights, while Chrome Remote Desktop runs.
+//
+// Plasma runs its parts (taskbar, network icon, Turn Off...) from your systemd user
+// service, and the system judges those by your user's "display session". With Chrome
+// Remote Desktop's background desktop open, that's Remote Desktop's (no seat), so they
+// counted as "not at the computer": the network icon asked for an admin password at
+// every login, and Turn Off asked for one too (or hung without a prompt).
+//
+// For your user, in an active session, these few actions are allowed as they are for
+// anyone sitting at the laptop -- nothing else changes. Remove with:
+//   looks desktop-rights remove
+polkit.addRule(function (action, subject) {
+  if (subject.user != "@USER@" || !subject.active)
+    return polkit.Result.NOT_HANDLED;
+  var id = action.id;
+  var allowed =
+    // turn off, restart, sleep (also while Remote Desktop's session counts as another user)
+    /^org\.freedesktop\.login1\.(power-off|reboot|halt|suspend|hibernate)(-multiple-sessions)?$/.test(id) ||
+    // network and Wi-Fi from the taskbar
+    /^org\.freedesktop\.NetworkManager\.(network-control|enable-disable-(network|wifi|wwan)|wifi\.scan|settings\.modify\.own|wifi\.share\.(open|protected))$/.test(id) ||
+    // USB drives
+    /^org\.freedesktop\.udisks2\.(filesystem-mount|encrypted-unlock|eject-media|power-off-drive)$/.test(id);
+  return allowed ? polkit.Result.YES : polkit.Result.NOT_HANDLED;
+});

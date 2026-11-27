@@ -10,6 +10,7 @@
 #   looks rebuild win7             rebuild Windows 7 after a Plasma update
 #   looks sessions remove          take the sessions off the login screen
 #   looks auth [remove]            one password covers 30 minutes of admin prompts
+#   looks desktop-rights [remove]  Turn Off, network, USB drives without an admin password
 #   looks sandbox <look> start|stop|shot NAME|run CMD   a hidden session, for testing
 #   looks help
 set -Eeuo pipefail
@@ -143,6 +144,27 @@ cmd_auth() {
   rm -f "$script"
 }
 
+# looks desktop-rights [remove]: Turn Off, network and USB drives without an admin
+# password while Chrome Remote Desktop's session is open (lib/root/48-kali-looks-desktop.rules)
+cmd_desktop_rights() {
+  local script; script=$(mktemp)
+  case ${1:-install} in
+    install)
+      {
+        echo 'set -e'
+        echo "sed 's/@USER@/$(id -un)/' '$HERE/lib/root/48-kali-looks-desktop.rules' > /etc/polkit-1/rules.d/48-kali-looks-desktop.rules"
+        echo 'chmod 644 /etc/polkit-1/rules.d/48-kali-looks-desktop.rules'
+      } > "$script"
+      pkexec bash "$script" || { rm -f "$script"; die "Not installed."; }
+      ok "Turn Off, network and USB drives work without an admin password (undo: looks desktop-rights remove)." ;;
+    remove)
+      echo 'rm -f /etc/polkit-1/rules.d/48-kali-looks-desktop.rules' > "$script"
+      pkexec bash "$script" && ok "Removed." ;;
+    *) die "usage: looks desktop-rights [remove]" ;;
+  esac
+  rm -f "$script"
+}
+
 cmd_install() {
   mkdir -p "$BIN_DIR"
   ln -sf "$HERE/looks.sh" "$BIN_DIR/looks"
@@ -173,6 +195,7 @@ case "${1:-help}" in
     esac ;;
   switch) shift; cmd_switch "$@" ;;
   auth) shift; cmd_auth "$@" ;;
+  desktop-rights) shift; cmd_desktop_rights "$@" ;;
   session-hook) cmd_session_hook "${2:-}" ;;
   session-start) cmd_session_start ;;
   sandbox) shift; cmd_sandbox "$@" ;;

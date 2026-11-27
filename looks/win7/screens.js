@@ -31,13 +31,28 @@
     removed++;
   }
 
-  function copyConfig(from, to, group) {
+  function copyGroup(from, to, group) {
     from.currentConfigGroup = group;
     to.currentConfigGroup = group;
-    var keys = from.configKeys;
-    for (var k = 0; k < keys.length; k++) to.writeConfig(keys[k], from.readConfig(keys[k]));
-    to.reloadConfig();
+    var keys = from.configKeys, changed = false;
+    for (var k = 0; k < keys.length; k++) {
+      var v = from.readConfig(keys[k]);
+      if (String(to.readConfig(keys[k])) != String(v)) { to.writeConfig(keys[k], v); changed = true; }
+    }
+    return changed;
   }
+  // a widget's settings, all of them (the clock keeps its date format under
+  // "Appearance"), except the notification area's own widgets
+  function copyConfig(from, to) {
+    from.currentConfigGroup = [];
+    var list = from.configGroups, groups = ["General"], changed = false;
+    for (var g = 0; g < list.length; g++) if (String(list[g]) != "General") groups.push(String(list[g]));
+    for (var g = 0; g < groups.length; g++)
+      if (groups[g] != "Applets") changed = copyGroup(from, to, [groups[g]]) || changed;
+    if (changed) to.reloadConfig();
+    return changed;
+  }
+
   // the main taskbar's widgets, in their order
   main.currentConfigGroup = ["General"];
   var order = String(main.readConfig("AppletOrder") || "").split(";"), widgets = [];
@@ -58,10 +73,22 @@
     panel.lengthMode = main.lengthMode;
     for (var k = 0; k < widgets.length; k++) {
       var w = panel.addWidget(widgets[k].type);
-      if (w) copyConfig(widgets[k], w, ["General"]);
+      if (w) copyConfig(widgets[k], w);
     }
     byScreen[s] = panel;
     added++;
+  }
+
+  // The other taskbars' widgets set like the main one's (same pins, same clock).
+  var synced = 0;
+  for (var s in byScreen) {
+    var p = byScreen[s];
+    if (p === main) continue;
+    var ws = p.widgets();
+    for (var k = 0; k < ws.length; k++) {
+      var m = find(main, ws[k].type);
+      if (m && copyConfig(m, ws[k])) synced++;
+    }
   }
 
   // Wallpaper: screens without one of their own get the main screen's.
@@ -80,5 +107,5 @@
       dd.writeConfig("Image", img); dd.writeConfig("FillMode", fill); dd.reloadConfig(); filled++;
     }
   }
-  print("taskbars added: " + added + ", extra taskbars removed: " + removed + ", wallpapers set: " + filled);
+  print("taskbars added: " + added + ", extra taskbars removed: " + removed + ", widgets synced: " + synced + ", wallpapers set: " + filled);
 })();
