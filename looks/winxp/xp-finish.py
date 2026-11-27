@@ -517,10 +517,44 @@ def screen_scale(cfg):
     value = f"{scale:g}"
     if scale == 1.0:
         return
+    before = glob.read_text() if glob.exists() else ""
     ini_set(glob, ["KScreen"], {"ScaleFactor": value,
                                 "ScreenScaleFactors": "".join(f"{o}={value};" for o in outputs)})
     stamp.write_text(value + "\n")
-    log(f"screen scale {int(scale * 100)}% ({dpi:.0f} dpi panel)")
+    if glob.read_text() != before:
+        log(f"screen scale {int(scale * 100)}% ({dpi:.0f} dpi panel)")
+
+
+def plasma_script(path):
+    q = shutil.which("qdbus6") or shutil.which("qdbus")
+    if not q:
+        return ""
+    for _ in range(30):  # Plasma may still be starting
+        r = subprocess.run([q, "org.kde.plasmashell", "/PlasmaShell", "org.kde.PlasmaShell.evaluateScript",
+                            Path(path).read_text()], capture_output=True, text=True)
+        if r.returncode == 0:
+            return r.stdout.strip()
+        import time
+        time.sleep(1)
+    return ""
+
+
+def screens_live():
+    """Every screen gets an XP taskbar and the XP wallpaper, at the session's scale
+    (screens.js). Runs at login and whenever screens are plugged in or rearranged."""
+    cfg = HOME / ".config"
+    glob = cfg / "kdeglobals"
+    before = glob.read_text() if glob.exists() else ""
+    screen_scale(cfg)
+    after = glob.read_text() if glob.exists() else ""
+    m = re.search(r"^ScreenScaleFactors=(.*)$", after, re.M)
+    if after != before and m:
+        # a new screen joined: Plasma's own windows take the scale now, apps at next login
+        subprocess.run(["systemctl", "--user", "set-environment", f"QT_SCREEN_SCALE_FACTORS={m.group(1)}"], check=False)
+        subprocess.run(["systemctl", "--user", "restart", "plasma-plasmashell.service"], check=False)
+    out = plasma_script(HERE / "screens.js")
+    if out:
+        log(out)
 
 
 def refresh_watcher(cfg):
@@ -549,9 +583,28 @@ Type=oneshot
 ExecStartPre=/bin/sleep 4
 ExecStart=/usr/bin/python3 {HERE / 'xp-finish.py'} --refresh
 """)
-    link = wants / "kali-looks-xp-refresh.path"
-    if not link.exists():
-        link.symlink_to("../kali-looks-xp-refresh.path")
+    (unit_dir / "kali-looks-xp-screens.path").write_text("""[Unit]
+Description=kali-looks: XP taskbar and wallpaper on every screen, when screens change
+
+[Path]
+PathChanged=%h/.local/share/kscreen
+Unit=kali-looks-xp-screens.service
+
+[Install]
+WantedBy=default.target
+""")
+    (unit_dir / "kali-looks-xp-screens.service").write_text(f"""[Unit]
+Description=kali-looks: XP taskbar and wallpaper on every screen
+
+[Service]
+Type=oneshot
+ExecStartPre=/bin/sleep 3
+ExecStart=/usr/bin/python3 {HERE / 'xp-finish.py'} --screens
+""")
+    for unit in ("kali-looks-xp-refresh.path", "kali-looks-xp-screens.path"):
+        link = wants / unit
+        if not link.exists():
+            link.symlink_to("../" + unit)
 
 
 def main():
@@ -564,6 +617,10 @@ def main():
     if args and args[0] == "--live":
         pinned_programs()
         most_used_programs()
+        screens_live()
+        return
+    if args and args[0] == "--screens":
+        screens_live()
         return
     if not args:
         sys.exit(__doc__)
