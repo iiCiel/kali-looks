@@ -72,6 +72,27 @@ def clock(cfg):
         log("clock date as 11/27/2026")
 
 
+def desktop_menu(cfg):
+    """The desktop's right-click menu as Windows 7's: no KDE "Enter Edit Mode"."""
+    sys.path.insert(0, str(HERE.parent / "winxp"))
+    import xp_taskbars
+    f = Path(cfg) / "plasma-io.gitgud.wackyideas.desktop-appletsrc"
+    if not f.exists():
+        return
+    ini = xp_taskbars.Ini(f.read_text())
+    changed = False
+    for name in list(ini.names()):
+        if name.startswith("ActionPlugins][") and name.count("][") == 1 and ini.get(name, "RightButton;NoModifier") == "org.kde.contextmenu":
+            g = name + "][RightButton;NoModifier"
+            for key in ("desktop edit mode", "edit mode"):
+                if ini.get(g, key) != "false":
+                    ini.set(g, key, "false")
+                    changed = True
+    if changed:
+        f.write_text(ini.text())
+        log("desktop menu without Enter Edit Mode")
+
+
 def watcher(cfg):
     """Re-run --screens when screens change (a unit of this look's own, stopped when
     you switch to another look)."""
@@ -124,6 +145,7 @@ def main():
     cfg = Path(args[0])
     locale(cfg)
     clock(cfg)
+    desktop_menu(cfg)
     xp.windows_names()
     xp.screen_scale(cfg, STAMP)
     watcher(cfg)
