@@ -15,6 +15,7 @@
   Snipping Tool, Media Player, Notepad...) after yours (set once; yours to change).
 """
 import importlib.util
+import json
 import re
 import sys
 from pathlib import Path
@@ -138,6 +139,29 @@ def title_buttons(cfg):
         log("title bar buttons: minimize, maximize, close")
 
 
+def alt_tab(cfg):
+    """Alt+Tab as on Windows 7: on, with AeroShell's Windows 7 switcher (window
+    thumbnails in a glass box, centred on the screen). The look's first setup left the
+    shortcut off, and KDE's fallback switcher opens in the corner of the left screen."""
+    import subprocess
+    rc = cfg / "kglobalshortcutsrc"
+    if rc.exists():
+        text = rc.read_text()
+        new = re.sub(r"^Walk Through Windows=none,", r"Walk Through Windows=Alt+Tab\\tMeta+Tab,", text, flags=re.M)
+        new = re.sub(r"^Walk Through Windows \(Reverse\)=none,",
+                     r"Walk Through Windows (Reverse)=Alt+Shift+Tab\\tMeta+Shift+Tab,", new, flags=re.M)
+        if new != text:
+            rc.write_text(new)
+            log("Alt+Tab on")
+    kwin = cfg / "kwinrc"
+    have = subprocess.run(["kreadconfig6", "--file", str(kwin), "--group", "TabBox", "--key", "LayoutName"],
+                          capture_output=True, text=True).stdout.strip()
+    if not have and Path("/usr/share/kwin/tabbox/thumbnail_aero").is_dir():
+        subprocess.run(["kwriteconfig6", "--file", str(kwin), "--group", "TabBox",
+                        "--key", "LayoutName", "thumbnail_aero"])
+        log("Alt+Tab switcher: Windows 7's")
+
+
 # Kali's own Start menu favourites, which KDE puts back when it sets the menu up again
 # (a new activity, a reset menu): not on a Windows 7 Start menu.
 KALI_PINS = re.compile(r"kali-|exploit|offsec|vulnhub|root-terminal|org\.kde\.kate\.desktop|"
@@ -166,37 +190,137 @@ def prune_pins():
 
 
 SEVENSTART = "io.gitgud.wackyideas.SevenStart"
+SEVENTASKS = "io.gitgud.wackyideas.seventasks"
 POWER_WORDS = {"Log Out": "Log off", "Switch User": "Switch user", "Shut Down": "Shut down"}
 
+# Windows 7's taskbar menu (right-click on the taskbar): Cascade windows, Show windows
+# stacked, Show windows side by side, Show the desktop, Start Task Manager, Lock the
+# taskbar, Properties. AeroShell's has KDE's items, and its "Task Manager" runs
+# ksysguard, which Plasma 6 doesn't have.
+TASKBAR_MENU = r"""    Plasmoid.contextualActions: [ // kali-looks: Windows 7's taskbar menu
+        PlasmaCore.Action {
+            text: i18n("Cascade windows")
+            onTriggered: menu_executable.exec("bash '@ARRANGE@' cascade")
+        },
+        PlasmaCore.Action {
+            text: i18n("Show windows stacked")
+            onTriggered: menu_executable.exec("bash '@ARRANGE@' stack")
+        },
+        PlasmaCore.Action {
+            text: i18n("Show windows side by side")
+            onTriggered: menu_executable.exec("bash '@ARRANGE@' side")
+        },
+        PlasmaCore.Action {
+            text: i18n("Show the desktop")
+            onTriggered: menu_executable.exec("qdbus6 org.kde.kglobalaccel /component/kwin invokeShortcut 'Show Desktop'")
+        },
+        PlasmaCore.Action { isSeparator: true },
+        PlasmaCore.Action {
+            text: i18n("Start Task Manager")
+            onTriggered: menu_executable.exec("plasma-systemmonitor")
+        },
+        PlasmaCore.Action { isSeparator: true },
+        PlasmaCore.Action {
+            // Unlocking the taskbar is Plasma's panel edit mode
+            text: i18n("Lock the taskbar")
+            checkable: true
+            checked: true
+            onTriggered: {
+                checked = true;
+                Plasmoid.containment.internalAction("configure")?.trigger();
+            }
+        },
+        PlasmaCore.Action {
+            text: i18n("Properties")
+            onTriggered: Plasmoid.internalAction("configure")?.trigger()
+        }
+    ]
+    // kali-looks: Plasma turns some of KDE's items back on, so again as the menu opens
+    Connections {
+        target: Plasmoid
+        function onContextualActionsAboutToShow() { tasks.kaliHideKdeItems(); }
+    }
+    function kaliHideKdeItems() {
+        for (const a of [Plasmoid.internalAction("configure"), Plasmoid.internalAction("alternatives"),
+                         Plasmoid.containment.internalAction("add widgets"),
+                         Plasmoid.containment.internalAction("configure")])
+            if (a) a.visible = false;
+        // Plasma adds Show Alternatives whenever it's enabled
+        const alt = Plasmoid.internalAction("alternatives");
+        if (alt) alt.enabled = false;
+    }
+"""
+# Only Windows 7's items in that menu: KDE's own (Configure, Show Alternatives, Add or
+# Manage Widgets, Show Panel Configuration) hidden there; Properties and Lock the
+# taskbar reach them.
+TASKBAR_HIDE = "        kaliHideKdeItems(); // kali-looks\n"
 
-def start_menu():
-    """The Start menu's power menu in Windows 7's words (Log off, Switch user). A copy
-    of AeroShell's Start menu with that one change, made again from the installed one at
-    every login (so an AeroShell update comes through) and linked in only while the
-    Windows 7 look runs."""
-    import json
-    import shutil
-    src = Path("/usr/share/plasma/plasmoids") / SEVENSTART
-    dest = HOME / ".local/share/plasma/plasmoids" / SEVENSTART
-    if not src.is_dir():
-        return
-    qml = "contents/ui/MenuRepresentation.qml"
+
+def _start_menu_edit(text):
     old = 'text: "       " + model.display + "      "'
-    words = json.dumps(POWER_WORDS)
-    new = f'text: "       " + ({words}[model.display] || model.display) + "      " // kali-looks'
-    text = (src / qml).read_text()
     if text.count(old) != 1:
-        return  # AeroShell changed: leave its own
-    want = text.replace(old, new)
-    if dest.exists() and (dest / qml).exists() and (dest / qml).read_text() == want \
-            and (dest / "metadata.json").read_text() == (src / "metadata.json").read_text():
-        return
-    target = dest.resolve() if dest.is_symlink() else dest
-    if target.exists():
-        shutil.rmtree(target)
-    shutil.copytree(src, target, symlinks=True)
-    (target / qml).write_text(want)
-    log("Start menu: Log off, Switch user")
+        return None
+    words = json.dumps(POWER_WORDS)
+    return text.replace(old, f'text: "       " + ({words}[model.display] || model.display) + "      " // kali-looks')
+
+
+def _taskbar_edit(text):
+    m = re.search(r"^    Plasmoid\.contextualActions: \[\n.*?^    \]\n", text, re.M | re.S)
+    hook = "    Component.onCompleted: {\n        TaskTools.taskManagerInstanceCount += 1;\n"
+    if not m or text.count(hook) != 1:
+        return None
+    text = text[:m.start()] + TASKBAR_MENU.replace("@ARRANGE@", str(HERE / "arrange.sh")) + text[m.end():]
+    return text.replace(hook, hook + TASKBAR_HIDE)
+
+
+# AeroShell widgets we change: (widget, file, edit). Each is a copy of the installed
+# widget with the change, made again from the installed one at every login (so an
+# AeroShell update comes through) and linked in only while the Windows 7 look runs.
+def _jumplist_edit(text):
+    """Windows 7's words in a taskbar button's jump list."""
+    pairs = [('text: "Pin program to taskbar"', 'text: "Pin this program to taskbar"'),
+             ('text: i18n("Unpin program from taskbar")', 'text: i18n("Unpin this program from taskbar")')]
+    if any(text.count(a) != 1 for a, _ in pairs):
+        return None
+    for a, b in pairs:
+        text = text.replace(a, b)
+    return text
+
+
+PATCHED = [
+    (SEVENSTART, {"contents/ui/MenuRepresentation.qml": _start_menu_edit}, "Start menu: Log off, Switch user"),
+    (SEVENTASKS, {"contents/ui/main.qml": _taskbar_edit, "contents/ui/TasksMenu.qml": _jumplist_edit},
+     "taskbar menus: Windows 7's"),
+]
+
+
+def patch_widgets():
+    import shutil
+    for widget, edits, what in PATCHED:
+        src = Path("/usr/share/plasma/plasmoids") / widget
+        dest = HOME / ".local/share/plasma/plasmoids" / widget
+        if not src.is_dir():
+            continue
+        want = {}
+        for qml, edit in edits.items():
+            new = edit((src / qml).read_text()) if (src / qml).is_file() else None
+            if new is None:
+                log(f"{widget}: {qml} changed upstream; left as AeroShell's")
+                continue
+            want[qml] = new
+        if not want:
+            continue
+        if (dest / "metadata.json").is_file() \
+                and (dest / "metadata.json").read_text() == (src / "metadata.json").read_text() \
+                and all((dest / q).is_file() and (dest / q).read_text() == t for q, t in want.items()):
+            continue
+        target = dest.resolve() if dest.is_symlink() else dest
+        if target.exists():
+            shutil.rmtree(target)
+        shutil.copytree(src, target, symlinks=True)
+        for q, t in want.items():
+            (target / q).write_text(t)
+        log(what)
 
 
 def watcher(cfg):
@@ -255,7 +379,8 @@ def main():
     desktop_menu(cfg)
     tray(cfg)
     title_buttons(cfg)
-    start_menu()
+    alt_tab(cfg)
+    patch_widgets()
     xp.windows_names()
     xp.screen_scale(cfg, STAMP)
     watcher(cfg)

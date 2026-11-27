@@ -192,6 +192,7 @@ macos|.local/share/kactivitymanagerd
 plasma|.local/share/kactivitymanagerd
 win7|.local/share/wallpapers/kali-looks-aero
 win7|.local/share/plasma/plasmoids/io.gitgud.wackyideas.SevenStart
+win7|.local/share/plasma/plasmoids/io.gitgud.wackyideas.seventasks
 macos|.local/share/applications/mac-tahoe-clipboard.desktop
 macos|.local/share/applications/org.kde.mac-tahoe-liquid-kde.apps.desktop
 macos|.local/share/applications/org.kde.mac-tahoe-liquid-kde.settings.desktop
