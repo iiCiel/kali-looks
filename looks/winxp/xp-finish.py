@@ -193,6 +193,32 @@ def start_menu():
     ])
 
 
+def start_menu_width():
+    # XP sized the Start menu to its longest entry ("Set Program Access and
+    # Defaults" fits); XPlasma's theme fixes it at 380 px and cuts that one off.
+    f = PLASMOIDS / "fyi.hotsocket.xplasma.start/contents/ui/XpFullRepresentation.qml"
+    patch(f, [("implicitWidth: root.launcher.themeData.layout.width - frameLeft - frameRight",
+               "implicitWidth: root.launcher.themeData.layout.width + 40 - frameLeft - frameRight  // kali-looks")])
+    patch(PLASMOIDS / "fyi.hotsocket.xplasma.start/contents/ui/StartMenu.qml",
+          [("    width: metrics.width\n", "    width: metrics.width + 40  // kali-looks: room for XP's longest entry\n")])
+
+
+def programs_menus():
+    # XP's All Programs menus have no title row, and grow to the screen's height
+    # instead of scrolling after 17 entries.
+    patch(PLASMOIDS / "fyi.hotsocket.xplasma.start/contents/ui/XpProgramsPopup.qml", [
+        ("height: Math.min(420, Math.max(54, entries.count * 24 + 30))",
+         "height: Math.min(900, Math.max(30, entries.count * 24 + 7))  // kali-looks"),
+        ("""            x: 10; y: 6; width: parent.width - 20
+            text: popup.title""",
+         """            x: 10; y: 6; width: parent.width - 20
+            visible: false  // kali-looks: XP has no title here
+            text: popup.title"""),
+        ("x: 6; y: 26; width: parent.width - 12; height: parent.height - y - 4",
+         "x: 3; y: 3; width: parent.width - 6; height: parent.height - y - 4"),
+    ])
+
+
 def user_pictures(src):
     if (AVATARS / "xp-chess.png").exists() or not src:
         return
@@ -312,10 +338,32 @@ def pinned_programs():
     log("Start menu pins set to " + ", ".join(want) + " (old list in winxp-pins-before.json)")
 
 
+def most_used_programs():
+    """XP's Start menu lists the programs you use most. KDE only counts programs
+    started from its menus, so on a new look the list is empty: start it with
+    programs that are installed here (once; real use takes over from there)."""
+    stamp = DATA / "winxp-mfu.done"
+    if stamp.exists():
+        return
+    apps = Path("/usr/share/applications")
+    picks = [a for a in ["com.anthropic.Claude.desktop", "org.kde.konsole.desktop",
+                         "org.kde.dolphin.desktop", "org.kde.kate.desktop", "discord.desktop",
+                         "org.kde.plasma-systemmonitor.desktop"] if (apps / a).exists()]
+    for app in reversed(picks):  # the last one counted comes first
+        subprocess.run(["gdbus", "call", "--session", "-d", "org.kde.ActivityManager", "-o",
+                        "/ActivityManager/Resources", "-m",
+                        "org.kde.ActivityManager.Resources.RegisterResourceEvent",
+                        "org.kde.plasma.kicker", "0", "applications:" + app, "0"],
+                       capture_output=True, text=True)
+    stamp.write_text("\n".join(picks) + "\n")
+    log("most-used list started with " + ", ".join(picks))
+
+
 def main():
     args = sys.argv[1:]
     if args and args[0] == "--live":
         pinned_programs()
+        most_used_programs()
         return
     if not args:
         sys.exit(__doc__)
@@ -325,6 +373,8 @@ def main():
     show_desktop_launcher()
     desktop_menu()
     start_menu()
+    start_menu_width()
+    programs_menus()
     session_config(cfg)
 
 
