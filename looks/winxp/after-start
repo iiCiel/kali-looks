@@ -1,0 +1,4 @@
+#!/bin/sh
+# kali-looks: runs once the Windows XP session is up.
+here=$(dirname "$(readlink -f "$0")")
+exec python3 "$here/xp-finish.py" --live

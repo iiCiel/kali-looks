@@ -1,0 +1,6 @@
+#!/bin/sh
+# kali-looks: runs before the Windows XP session starts (Plasma isn't up yet).
+# $1 = this look's config folder.
+here=$(dirname "$(readlink -f "$0")")
+src=$(ls -d "$HOME"/.local/share/kali-looks/src/xplasma-plus-*/XPlasma-Plus-* 2>/dev/null | tail -1)
+exec python3 "$here/xp-finish.py" "$1" "$src"

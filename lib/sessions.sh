@@ -209,7 +209,14 @@ cmd_session_hook() {
     state_set ACTIVE "$look"
     systemctl --user daemon-reload 2>/dev/null || true
     reset_portals stop
-    [[ $look != base ]] && install_session_start "$target"
+    if [[ $look != base ]]; then
+      # Kali's Xfce sets QT_QPA_PLATFORMTHEME=qt5ct, and when its desktop ran first
+      # (Remote Desktop at boot) that stays behind: KDE then ignores the look's colors
+      # and fonts (dark menus, wrong font). KDE uses its own platform theme.
+      systemctl --user unset-environment QT_QPA_PLATFORMTHEME 2>/dev/null || true
+      install_session_start "$target"
+      [[ -x $HERE/looks/$look/before-session ]] && "$HERE/looks/$look/before-session" "$target"
+    fi
   } >>"$SESSION_LOG" 2>&1 || true
   [[ -n $ok || $(readlink -f "$HOME/.config" 2>/dev/null) == "$target" ]] && [[ -n $target ]] && echo "$target"
   true
@@ -268,6 +275,8 @@ EOF
 # that never got a wallpaper (setup ran on one hidden screen) get screen 1's.
 cmd_session_start() {
   restore_session_env
+  local look; look=$(current_look)
+  [[ -x $HERE/looks/$look/after-start ]] && "$HERE/looks/$look/after-start" >>"$SESSION_LOG" 2>&1
   # Remote Desktop notices the login a few seconds late; watch for its cleanup.
   ( for _ in $(seq 30); do sleep 1; restore_session_env; done ) >/dev/null 2>&1 &
   unset PULSE_RUNTIME_PATH PULSE_SINK PIPEWIRE_REMOTE CHROME_REMOTE_DESKTOP_SESSION
