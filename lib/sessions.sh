@@ -191,6 +191,7 @@ win7|.local/share/kactivitymanagerd
 macos|.local/share/kactivitymanagerd
 plasma|.local/share/kactivitymanagerd
 win7|.local/share/wallpapers/kali-looks-aero
+win7|.local/share/plasma/plasmoids/io.gitgud.wackyideas.SevenStart
 macos|.local/share/applications/mac-tahoe-clipboard.desktop
 macos|.local/share/applications/org.kde.mac-tahoe-liquid-kde.apps.desktop
 macos|.local/share/applications/org.kde.mac-tahoe-liquid-kde.settings.desktop
@@ -199,6 +200,15 @@ base|.local/share/applications/launchpad.desktop
 base|.local/share/applications/org.xfce.xfdesktop.desktop
 base|.local/share/applications/xfdesktop.desktop
 '
+# KDE apps' remembered window sizes and positions (~/.local/state): each look has its
+# own, since each look has its own scale (Windows 7's 150% made Windows Explorer open
+# wider than the screen at a size remembered from your 100% Mac desktop).
+for _f in dolphinstaterc konsolestaterc katestaterc kwritestaterc systemsettingsstaterc okularstaterc \
+    gwenviewstaterc arkstaterc plasma-systemmonitorstaterc kcalcstaterc spectaclestaterc dragonplayerstaterc; do
+  for _l in base winxp win7 macos plasma; do LOOK_FILES_TABLE+="$_l|.local/state/$_f"$'\n'; done
+done
+unset _f _l
+
 swap_look_files() { # swap_look_files <look now starting> [<look before>]
   local look=$1 prev=${2:-} rel owners owner p store keep line
   local -A by_path=()
@@ -389,6 +399,8 @@ stop_orphan_units() {
 # only in its own look (a "Hidden" copy in the others' autostart folders, marked ours).
 declare -A LOOK_ONLY_AUTOSTART=(
   [win7]="x-atpootb.desktop uac-polkit-agent.desktop"
+  # Xfce's own Bluetooth icon and compositor (the Plasma looks have KDE's)
+  [base]="blueman.desktop picom.desktop"
 )
 look_only_autostart() { # look_only_autostart <look> <its config folder>
   local look=$1 dir="$2/autostart" owner f
