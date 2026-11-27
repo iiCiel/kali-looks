@@ -207,8 +207,66 @@ cmd_session_hook() {
     swap_home_files "$prev" "$look" || echo "warning: couldn't swap the pointer/GTK2 files"
     state_set ACTIVE "$look"
     systemctl --user daemon-reload 2>/dev/null || true
+    reset_portals stop
+    [[ $look != base ]] && install_session_start "$target"
   } >>"$SESSION_LOG" 2>&1 || true
   [[ -n $ok || $(readlink -f "$HOME/.config" 2>/dev/null) == "$target" ]] && [[ -n $target ]] && echo "$target"
+  true
+}
+
+# The desktop portal (screenshots, screen sharing, file pickers) keeps the desktop
+# settings of whichever session started it first, e.g. Chrome Remote Desktop's Xfce
+# at boot. Stop it before a session starts; Plasma looks also restart it once Plasma
+# has published its own settings (looks session-start).
+reset_portals() { # reset_portals stop|restart
+  local u=(xdg-desktop-portal.service xdg-desktop-portal-gtk.service xdg-desktop-portal-kde.service)
+  if [[ $1 == stop ]]; then systemctl --user stop "${u[@]}" 2>/dev/null || true
+  else systemctl --user stop "${u[1]}" 2>/dev/null; systemctl --user try-restart "${u[0]}" 2>/dev/null || true; fi
+}
+
+install_session_start() { # install_session_start <look config tree>
+  local f="$1/autostart/kali-looks-session-start.desktop"
+  mkdir -p "$1/autostart"
+  cat >"$f" <<EOF
+[Desktop Entry]
+Type=Application
+Name=kali-looks session start
+Exec=$BIN_DIR/looks session-start
+NoDisplay=true
+OnlyShowIn=KDE;
+X-KDE-autostart-phase=1
+EOF
+}
+
+# Runs inside a Plasma look once it's up: portal on Plasma's settings, and screens
+# that never got a wallpaper (setup ran on one hidden screen) get screen 1's.
+cmd_session_start() {
+  reset_portals restart
+  local q; q=$(command -v qdbus6 || command -v qdbus) || return 0
+  local i; for i in $(seq 20); do "$q" org.kde.plasmashell /PlasmaShell >/dev/null 2>&1 && break; sleep 1; done
+  "$q" org.kde.plasmashell /PlasmaShell org.kde.PlasmaShell.evaluateScript '
+    var ds = desktops(), img = "", g = ["Wallpaper","org.kde.image","General"];
+    for (var i = 0; i < ds.length; i++) if (ds[i].screen == 0 && ds[i].wallpaperPlugin == "org.kde.image") {
+      ds[i].currentConfigGroup = g; img = ds[i].readConfig("Image"); }
+    if (img != "") for (var i = 0; i < ds.length; i++) {
+      var d = ds[i]; if (d.wallpaperPlugin != "org.kde.image") continue;
+      d.currentConfigGroup = g; if (d.readConfig("Image") == "") d.writeConfig("Image", img); }' >/dev/null 2>&1 || true
+  echo "$(date '+%F %T') session-start look=$(current_look)" >>"$SESSION_LOG"
+}
+
+# Setup in a hidden session runs with HOME set to the sandbox, and installers write
+# that path into their files. Point everything written during setup at your real home.
+fix_sandbox_paths() { # fix_sandbox_paths <look> <stamp file>
+  local look=$1 stamp=$2 sb f n=0
+  sb=$(sandbox_home "$look")
+  while IFS= read -r -d '' f; do
+    grep -qIF "$sb" "$f" 2>/dev/null || continue
+    sed -i "s#$sb#$HOME#g" "$f" && n=$((n+1))
+  done < <(find "$CFG_ROOT/$look" "$HOME/.local/share" "$HOME/.themes" "$HOME/.icons" \
+             -path "$DATA_DIR" -prune -o -type f -newer "$stamp" -print0 2>/dev/null)
+  find "$CFG_ROOT/$look" -type f -print0 2>/dev/null | xargs -0r grep -lIF "$sb" 2>/dev/null \
+    | while IFS= read -r f; do sed -i "s#$sb#$HOME#g" "$f"; done
+  [[ $n -gt 0 ]] && log "Pointed $n setup file(s) at your home instead of the hidden session's"
   true
 }
 

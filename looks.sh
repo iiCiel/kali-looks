@@ -92,9 +92,12 @@ cmd_setup() {
     trap 'cmd_sandbox "$LOOK_ID" stop >/dev/null 2>&1 || true' EXIT
     cmd_sandbox "$id" start
   fi
+  local stamp; stamp=$(mktemp); touch "$stamp"
   look_setup
   touch "$LOOK_CFG/.ready"
   if [[ $SETUP_MODE == sandbox ]]; then cmd_sandbox "$id" stop >/dev/null; trap - EXIT; fi
+  [[ $SETUP_MODE == sandbox ]] && fix_sandbox_paths "$id" "$stamp"
+  rm -f "$stamp"
   ok "$LOOK_TITLE is set up."
   if grep -q '^# >>> kali-looks >>>' "$XSESSIONRC" 2>/dev/null; then cmd_sessions_install; else
     echo "  Next: looks sessions   (puts it on the login screen)"; fi
@@ -171,6 +174,7 @@ case "${1:-help}" in
   switch) shift; cmd_switch "$@" ;;
   auth) shift; cmd_auth "$@" ;;
   session-hook) cmd_session_hook "${2:-}" ;;
+  session-start) cmd_session_start ;;
   sandbox) shift; cmd_sandbox "$@" ;;
   -h|--help|help) usage ;;
   --version) echo "looks $LOOKS_VERSION" ;;
