@@ -126,6 +126,38 @@ def tray(cfg):
         log("notification area as Windows 7's")
 
 
+START_SIDE = {"Home directory": 1, "Documents": 1, "Pictures": 1, "Music": 1, "Games": 1, "Computer": 1,
+              "Control Panel": 1, "Devices and Printers": 1, "Default Programs": 1, "Help and Support": 1}
+
+
+def start_side(cfg):
+    """The Start menu's right column as Windows 7's: Games between Music and Computer
+    (AeroShell has it, off by default). Only added where you haven't turned it off."""
+    sys.path.insert(0, str(HERE.parent / "winxp"))
+    import xp_taskbars
+    f = Path(cfg) / "plasma-io.gitgud.wackyideas.desktop-appletsrc"
+    if not f.exists():
+        return
+    ini = xp_taskbars.Ini(f.read_text())
+    changed = False
+    for name in list(ini.names()):
+        if ini.get(name, "plugin") != SEVENSTART:
+            continue
+        g = name + "][Configuration][General"
+        have = ini.get(g, "sidePanelVisibility")
+        try:
+            vis = json.loads(have) if have else dict(START_SIDE, Games=0)
+        except ValueError:
+            continue
+        if "Games" not in vis or (not have):
+            vis["Games"] = 1
+            ini.set(g, "sidePanelVisibility", json.dumps(vis, separators=(",", ":")))
+            changed = True
+    if changed:
+        f.write_text(ini.text())
+        log("Start menu: Games")
+
+
 def title_buttons(cfg):
     """Windows 7's title bar buttons: minimize, maximize, close (no "?" help button,
     which KDE's default adds). Only while you haven't picked your own."""
@@ -287,8 +319,29 @@ def _jumplist_edit(text):
     return text
 
 
+WIN7_PICTURE = Path("/usr/share/sddm/themes/sddm-theme-mod/Assets/user.png")  # AeroShell's copy
+
+
+def _picture_edit(text):
+    """The Start menu's user picture: Windows 7's default (the orange flower, which
+    AeroShell ships) while yours is still Kali's stock one (its dragon logo). A picture
+    you set yourself shows instead."""
+    old = "source: kuser.faceIconUrl.toString()\n"
+    if text.count(old) != 1:
+        return None
+    face, stock = HOME / ".face", Path("/etc/skel/.face")
+    try:
+        is_stock = not face.exists() or (stock.exists() and face.read_bytes() == stock.read_bytes())
+    except OSError:
+        is_stock = False
+    if not (is_stock and WIN7_PICTURE.exists()):
+        return text
+    return text.replace(old, f'source: "file://{WIN7_PICTURE}" // kali-looks: Windows 7\'s picture\n')
+
+
 PATCHED = [
-    (SEVENSTART, {"contents/ui/MenuRepresentation.qml": _start_menu_edit}, "Start menu: Log off, Switch user"),
+    (SEVENSTART, {"contents/ui/MenuRepresentation.qml": _start_menu_edit,
+                  "contents/ui/FloatingIcon.qml": _picture_edit}, "Start menu: Windows 7's"),
     (SEVENTASKS, {"contents/ui/main.qml": _taskbar_edit, "contents/ui/TasksMenu.qml": _jumplist_edit},
      "taskbar menus: Windows 7's"),
 ]
@@ -378,6 +431,7 @@ def main():
     clock(cfg)
     desktop_menu(cfg)
     tray(cfg)
+    start_side(cfg)
     title_buttons(cfg)
     alt_tab(cfg)
     patch_widgets()
