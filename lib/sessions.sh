@@ -193,6 +193,7 @@ cmd_session_hook() {
   fi
   {
     echo "$(date '+%F %T') session=$ds look=$look"
+    clear_crd_env
     ensure_config_link || exit 0
     clean_base_once
     if [[ $look == base ]]; then
@@ -212,6 +213,31 @@ cmd_session_hook() {
   } >>"$SESSION_LOG" 2>&1 || true
   [[ -n $ok || $(readlink -f "$HOME/.config" 2>/dev/null) == "$target" ]] && [[ -n $target ]] && echo "$target"
   true
+}
+
+# Chrome Remote Desktop's own desktop puts its audio server, display and agent socket
+# into the shared systemd environment. When you log in at the laptop while it runs,
+# your desktop would start with them (mic and sound go to Remote Desktop), and a
+# moment later its cleanup removes DISPLAY too (shortcuts like Print can't open apps).
+CRD_ONLY_VARS=(CHROME_REMOTE_DESKTOP_AUDIO_PIPE CHROME_CONFIG_HOME CHROME_REMOTE_DESKTOP_SESSION
+  CHROME_USER_DATA_DIR PIPEWIRE_REMOTE PULSE_CONFIG_PATH PULSE_RUNTIME_PATH PULSE_SINK
+  PULSE_STATE_PATH GDK_BACKEND)
+clear_crd_env() {
+  local env; env=$(systemctl --user show-environment 2>/dev/null) || return 0
+  local unset=("${CRD_ONLY_VARS[@]}")
+  grep -q '^SSH_AUTH_SOCK=.*crd_ssh_auth_sock' <<<"$env" && unset+=(SSH_AUTH_SOCK)
+  systemctl --user unset-environment "${unset[@]}" 2>/dev/null || true
+}
+# Put this session's display back if Remote Desktop's late cleanup removed it.
+restore_session_env() {
+  [[ -n ${DISPLAY:-} ]] || return 0
+  local env; env=$(systemctl --user show-environment 2>/dev/null) || return 0
+  if ! grep -qx "DISPLAY=$DISPLAY" <<<"$env" || grep -qE '^(PULSE_RUNTIME_PATH|PIPEWIRE_REMOTE)=' <<<"$env"; then
+    clear_crd_env
+    systemctl --user import-environment DISPLAY XAUTHORITY ${XDG_SESSION_ID:+XDG_SESSION_ID} 2>/dev/null || true
+    dbus-update-activation-environment DISPLAY XAUTHORITY >/dev/null 2>&1 || true
+    echo "$(date '+%F %T') session-start: put DISPLAY back after Remote Desktop's cleanup" >>"$SESSION_LOG"
+  fi
 }
 
 # The desktop portal (screenshots, screen sharing, file pickers) keeps the desktop
@@ -241,6 +267,10 @@ EOF
 # Runs inside a Plasma look once it's up: portal on Plasma's settings, and screens
 # that never got a wallpaper (setup ran on one hidden screen) get screen 1's.
 cmd_session_start() {
+  restore_session_env
+  # Remote Desktop notices the login a few seconds late; watch for its cleanup.
+  ( for _ in $(seq 30); do sleep 1; restore_session_env; done ) >/dev/null 2>&1 &
+  unset PULSE_RUNTIME_PATH PULSE_SINK PIPEWIRE_REMOTE CHROME_REMOTE_DESKTOP_SESSION
   reset_portals restart
   local q; q=$(command -v qdbus6 || command -v qdbus) || return 0
   local i; for i in $(seq 20); do "$q" org.kde.plasmashell /PlasmaShell >/dev/null 2>&1 && break; sleep 1; done
