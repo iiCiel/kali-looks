@@ -12,7 +12,7 @@ CFG_ROOT="$DATA_DIR/config"
 BASE_CFG="$CFG_ROOT/base"
 SESSION_LOG="$DATA_DIR/session.log"
 XSESSIONRC="$HOME/.xsessionrc"
-HIDDEN_SESSIONS="/usr/share/xsessions/aerothemeplasmax11.desktop /usr/share/wayland-sessions/aerothemeplasma.desktop /usr/share/xsessions/plasmax11.desktop /usr/share/xsessions/plasma.desktop /usr/share/wayland-sessions/plasma.desktop /usr/share/wayland-sessions/xfce-wayland.desktop"
+HIDDEN_SESSIONS="/usr/share/xsessions/aerothemeplasmax11.desktop /usr/share/wayland-sessions/aerothemeplasma.desktop /usr/share/xsessions/plasmax11.desktop /usr/share/xsessions/plasma.desktop /usr/share/wayland-sessions/plasma.desktop /usr/share/wayland-sessions/xfce-wayland.desktop /usr/share/xsessions/lightdm-xsession.desktop"
 
 # session id | look | name on the login screen | command | comment
 LOOK_SESSIONS=(
@@ -652,9 +652,13 @@ cmd_sessions_install() {
     done
     # Hidden from the login screen: AeroThemePlasma's own entries (ours replace them),
     # and the plain Plasma and Wayland sessions, which skip ~/.xsessionrc and so would
-    # run on whichever look's settings were used last.
+    # run on whichever look's settings were used last; and LightDM's generic Default Xsession.
+    # The marker is its own key: a comment after "true" makes the value invalid, so LightDM
+    # would ignore it (older installs wrote it that way; fixed here).
     echo "for f in $HIDDEN_SESSIONS; do"
-    echo '  if [ -f "$f" ] && ! grep -q "^NoDisplay=true" "$f"; then echo "NoDisplay=true # kali-looks" >> "$f"; fi; done'
+    echo '  [ -f "$f" ] || continue'
+    echo '  sed -i "/^NoDisplay=true # kali-looks\$/d" "$f"'
+    echo '  if ! grep -q "^NoDisplay=true\$" "$f"; then printf "NoDisplay=true\nX-KaliLooks-Hidden=true\n" >> "$f"; fi; done'
   } > "$script"
   log "Adding the looks to the login screen (asks for your password)"
   as_root bash "$script" || { rm -f "$script"; die "Couldn't write the session files."; }
@@ -674,7 +678,9 @@ cmd_sessions_remove() {
   {
     echo 'rm -f /usr/share/xsessions/kali-looks-*.desktop'
     echo "for f in $HIDDEN_SESSIONS; do"
-    echo '  if [ -f "$f" ]; then sed -i "/^NoDisplay=true\( # kali-looks\)\?$/d" "$f"; fi; done'
+    echo '  [ -f "$f" ] || continue'
+    echo '  sed -i "/^NoDisplay=true # kali-looks\$/d" "$f"'
+    echo '  if grep -q "^X-KaliLooks-Hidden=true\$" "$f"; then sed -i "/^NoDisplay=true\$/d;/^X-KaliLooks-Hidden=true\$/d" "$f"; fi; done'
   } > "$script"
   as_root bash "$script" || warn "Couldn't remove the session files."
   rm -f "$script"
