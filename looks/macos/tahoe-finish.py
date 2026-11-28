@@ -796,9 +796,35 @@ ExecStart=/usr/bin/python3 {HERE / 'tahoe-finish.py'} --wallpaper
             link.symlink_to("../" + unit)
 
 
+def wallpaper_repaint():
+    """After screens change, every screen draws its wallpaper again. When Plasma rebuilds
+    a screen's desktop (screen order changed, a screen plugged back in), the new one can
+    keep showing the Tahoe default although its settings name your picture; setting the
+    picture again makes it draw."""
+    q = shutil.which("qdbus6") or shutil.which("qdbus")
+    if not q:
+        return
+    script = """(function () { var n = 0;
+  desktops().forEach(function (d) {
+    if (d.screen < 0 || d.wallpaperPlugin != "org.kde.image") return;
+    d.currentConfigGroup = ["Wallpaper", "org.kde.image", "General"];
+    var img = d.readConfig("Image");
+    if (!img) return;
+    d.writeConfig("Image", ""); d.reloadConfig();
+    d.writeConfig("Image", img); d.reloadConfig(); n++;
+  });
+  print(n);
+})();"""
+    r = subprocess.run([q, "org.kde.plasmashell", "/PlasmaShell", "org.kde.PlasmaShell.evaluateScript", script],
+                       capture_output=True, text=True)
+    if r.returncode == 0:
+        log(f"wallpaper drawn again on {r.stdout.strip()} screen(s)")
+
+
 def main():
     if sys.argv[1:] == ["--screens"]:
         screens_live()
+        wallpaper_repaint()
         return
     if sys.argv[1:] == ["--wallpaper"]:
         wallpaper_sync()
