@@ -221,6 +221,10 @@ swap_look_files() { # swap_look_files <look now starting> [<look before>]
   done <<<"$LOOK_FILES_TABLE"
   for rel in "${!by_path[@]}"; do
     owners=${by_path[$rel]}; p="$HOME/$rel"
+    # already linked to this look's own: leave it (re-linking it made it vanish for a
+    # moment, and Xfce's dock dropped a pinned launcher that pointed at it)
+    store="$CFG_ROOT/$look/.home/$rel"
+    if [[ " $owners" == *" $look "* && -L $p && $(readlink "$p") == "$store" ]] && [[ -e $store || -L $store ]]; then continue; fi
     # a real one there (its look installed or rewrote it) goes to its look's folder:
     # the look that just ran, if it's one of the owners, else the first owner
     if [[ -e $p || -L $p ]] && ! [[ -L $p && $(readlink "$p") == "$CFG_ROOT"/* ]]; then
