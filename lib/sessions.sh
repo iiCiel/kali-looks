@@ -335,6 +335,8 @@ cmd_session_hook() {
       install_session_start "$target"
       fill_wallpapers "$look" "$target"
       ensure_current_activity "$target"
+      # closing, force quit, screenshots and the task manager, where KDE left them off
+      python3 "$HERE/lib/shortcuts.py" "$target" "$look" || echo "warning: couldn't check the shortcuts"
       [[ -x $HERE/looks/$look/before-session ]] && "$HERE/looks/$look/before-session" "$target"
     fi
   } >>"$SESSION_LOG" 2>&1 || true
