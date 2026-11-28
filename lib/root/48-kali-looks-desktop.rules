@@ -4,7 +4,8 @@
 // service, and the system judges those by your user's "display session". With Chrome
 // Remote Desktop's background desktop open, that's Remote Desktop's (no seat), so they
 // counted as "not at the computer": the network icon asked for an admin password at
-// every login, and Turn Off asked for one too (or hung without a prompt).
+// every login, Turn Off asked for one too (or hung without a prompt), and the
+// brightness keys did nothing.
 //
 // For your user, in an active session, these few actions are allowed as they are for
 // anyone sitting at the laptop -- nothing else changes. Remove with:
@@ -19,6 +20,9 @@ polkit.addRule(function (action, subject) {
     // network and Wi-Fi from the taskbar
     /^org\.freedesktop\.NetworkManager\.(network-control|enable-disable-(network|wifi|wwan)|wifi\.scan|settings\.modify\.own|wifi\.share\.(open|protected))$/.test(id) ||
     // USB drives
-    /^org\.freedesktop\.udisks2\.(filesystem-mount|encrypted-unlock|eject-media|power-off-drive)$/.test(id);
+    /^org\.freedesktop\.udisks2\.(filesystem-mount|encrypted-unlock|eject-media|power-off-drive)$/.test(id) ||
+    // screen brightness (the brightness keys and slider); without it Plasma finds "no
+    // displays available to adjust", since it can't even read the laptop's backlight
+    /^org\.kde\.powerdevil\.backlighthelper\.(brightness|brightnessmax|setbrightness|syspath)$/.test(id);
   return allowed ? polkit.Result.YES : polkit.Result.NOT_HANDLED;
 });
