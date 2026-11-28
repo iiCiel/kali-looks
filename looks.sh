@@ -10,7 +10,7 @@
 #   looks rebuild win7             rebuild Windows 7 after a Plasma update
 #   looks sessions remove          take the sessions off the login screen
 #   looks auth [remove]            one password covers 30 minutes of admin prompts
-#   looks desktop-rights [remove]  Turn Off, network, USB drives, brightness keys with Remote Desktop on
+#   looks desktop-rights [remove]  with Remote Desktop on: the rights you have at the laptop
 #   looks sandbox <look> start|stop|shot NAME|run CMD   a hidden session, for testing
 #   looks wallpaper [look]         a look's wallpaper; fills in screens showing Plasma's blue default
 #   looks dock-apps list|quit ID   running apps, windows or not (the macOS Tahoe Dock uses it)
@@ -164,8 +164,9 @@ cmd_auth() {
   rm -f "$script"
 }
 
-# looks desktop-rights [remove]: Turn Off, network and USB drives without an admin
-# password while Chrome Remote Desktop's session is open (lib/root/48-kali-looks-desktop.rules)
+# looks desktop-rights [remove]: while Chrome Remote Desktop's session is open, your desktop
+# gets what someone at the laptop gets: Turn Off, network, USB drives, brightness, power
+# modes, the lid... (lib/root/48-kali-looks-desktop.rules, lib/root/kali-looks-at-laptop)
 cmd_desktop_rights() {
   local script; script=$(mktemp)
   case ${1:-install} in
@@ -174,13 +175,14 @@ cmd_desktop_rights() {
         echo 'set -e'
         echo "sed 's/@USER@/$(id -un)/' '$HERE/lib/root/48-kali-looks-desktop.rules' > /etc/polkit-1/rules.d/48-kali-looks-desktop.rules"
         echo 'chmod 644 /etc/polkit-1/rules.d/48-kali-looks-desktop.rules'
+        echo "install -D -m 755 '$HERE/lib/root/kali-looks-at-laptop' /usr/local/libexec/kali-looks-at-laptop"
       } > "$script"
       pkexec bash "$script" || { rm -f "$script"; die "Not installed."; }
       # Plasma's brightness service looks for screens once, when it starts
       systemctl --user try-restart plasma-powerdevil.service 2>/dev/null || true
-      ok "Turn Off, network, USB drives and the brightness keys work without an admin password (undo: looks desktop-rights remove)." ;;
+      ok "Your desktop has the same rights as at the laptop, Remote Desktop or not: Turn Off, network, USB drives, brightness, power modes (undo: looks desktop-rights remove)." ;;
     remove)
-      echo 'rm -f /etc/polkit-1/rules.d/48-kali-looks-desktop.rules' > "$script"
+      echo 'rm -f /etc/polkit-1/rules.d/48-kali-looks-desktop.rules /usr/local/libexec/kali-looks-at-laptop' > "$script"
       pkexec bash "$script" && ok "Removed." ;;
     *) die "usage: looks desktop-rights [remove]" ;;
   esac

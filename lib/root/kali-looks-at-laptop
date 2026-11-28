@@ -1,0 +1,21 @@
+#!/bin/sh
+# kali-looks-at-laptop USER ACTION
+#
+# Asked by polkit (lib/root/48-kali-looks-desktop.rules): if USER is logged in at the
+# laptop right now (an active session on seat0), print what ACTION allows someone at
+# the laptop ("implicit active": yes, auth_self, auth_admin_keep, ...). Otherwise print
+# "none". Read-only: it only asks logind and polkit.
+user=$1 action=$2
+case $user in ''|*[!a-z0-9_-]*) echo none; exit 0 ;; esac
+case $action in ''|*[!A-Za-z0-9._-]*) echo none; exit 0 ;; esac
+
+at=no
+for s in $(loginctl show-user "$user" -p Sessions --value 2>/dev/null); do
+  if [ "$(loginctl show-session "$s" -p Seat --value 2>/dev/null)" = seat0 ] &&
+     [ "$(loginctl show-session "$s" -p Active --value 2>/dev/null)" = yes ]; then
+    at=yes
+  fi
+done
+[ $at = yes ] || { echo none; exit 0; }
+
+pkaction --action-id "$action" --verbose 2>/dev/null | sed -n 's/^ *implicit active: *//p' | head -n 1

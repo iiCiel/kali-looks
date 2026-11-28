@@ -88,7 +88,9 @@ If the brightness keys do nothing while Chrome Remote Desktop is installed, run 
 
 ## With Chrome Remote Desktop installed
 
-Chrome Remote Desktop starts its own desktop at boot, and the system then counts it, not the laptop, as your main session. Plasma's parts are judged by that session, so they act as if you weren't at the computer: the network icon and Turn Off ask for an admin password, and the brightness keys do nothing. `looks desktop-rights` installs a polkit rule that gives your user, in an active session, just those everyday rights back: turn off, restart and sleep; network and Wi-Fi; USB drives; screen brightness. `looks desktop-rights remove` takes it out.
+Chrome Remote Desktop starts its own desktop at boot, and the system then counts it, not the laptop, as your main session. Plasma's parts are judged by that session, so they act as if you weren't at the computer: the network icon and Turn Off ask for an admin password, the brightness keys do nothing, and power modes, the lid and "don't sleep while a video plays" are refused (66 permissions in all on a Kali Plasma install).
+
+`looks desktop-rights` installs a polkit rule: while you're logged in at the laptop, your desktop gets exactly what someone at the laptop gets, action by action (no password where that needs none, the admin's where that needs the admin's). When you're only connected remotely, it keeps just the everyday few: turn off, restart and sleep; network and Wi-Fi; USB drives; brightness. `looks desktop-rights remove` takes it out.
 
 ## Fewer password prompts (optional)
 
