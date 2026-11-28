@@ -176,6 +176,8 @@ cmd_desktop_rights() {
         echo 'chmod 644 /etc/polkit-1/rules.d/48-kali-looks-desktop.rules'
       } > "$script"
       pkexec bash "$script" || { rm -f "$script"; die "Not installed."; }
+      # Plasma's brightness service looks for screens once, when it starts
+      systemctl --user try-restart plasma-powerdevil.service 2>/dev/null || true
       ok "Turn Off, network, USB drives and the brightness keys work without an admin password (undo: looks desktop-rights remove)." ;;
     remove)
       echo 'rm -f /etc/polkit-1/rules.d/48-kali-looks-desktop.rules' > "$script"
