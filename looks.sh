@@ -13,6 +13,7 @@
 #   looks desktop-rights [remove]  Turn Off, network, USB drives without an admin password
 #   looks sandbox <look> start|stop|shot NAME|run CMD   a hidden session, for testing
 #   looks wallpaper [look]         a look's wallpaper; fills in screens showing Plasma's blue default
+#   looks dock-apps list|quit ID   running apps, windows or not (the macOS Tahoe Dock uses it)
 #   looks help
 set -Eeuo pipefail
 
