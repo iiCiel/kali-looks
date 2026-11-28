@@ -1,0 +1,4 @@
+#!/bin/sh
+# kali-looks: runs once the macOS Tahoe session is up.
+here=$(dirname "$(readlink -f "$0")")
+exec python3 "$here/tahoe-finish.py" --live

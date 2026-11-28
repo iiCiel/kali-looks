@@ -5,6 +5,8 @@ Runs before every Tahoe session (Plasma isn't running yet) and after setup. Each
 step checks first and changes nothing when it's already right.
 
   tahoe-finish.py <look config tree>
+  tahoe-finish.py --live      once the session is up (after-start)
+  tahoe-finish.py --screens   when screens change (kali-looks-tahoe-screens.path)
 """
 import json
 import os
@@ -267,6 +269,32 @@ def menu_bar_every_screen(cfg, tree, screens):
         rc.save()
 
 
+def menu_bar_views(cfg, tree):
+    """Bars added while the session ran (screens.js) can't set how Plasma draws them:
+    give each the main bar's look (glass behind the items, no panel background)."""
+    path = Path(tree) / "plasmashellrc"
+    bars = menu_bars(cfg)
+    if not path.exists() or len(bars) < 2:
+        return
+    rc = KConfig(path)
+    on = {}
+    for cid in bars:
+        try:
+            on.setdefault(int(cfg.get(["Containments", str(cid)], "lastScreen", "-1")), cid)
+        except ValueError:
+            pass
+    main = rc.find("PlasmaViews", f"Panel {on.get(0, min(bars))}")
+    if not main:
+        return
+    for cid in bars:
+        for line in main[1]:
+            if "=" in line:
+                k, v = line.split("=", 1)
+                rc.set(["PlasmaViews", f"Panel {cid}"], k, v)
+    if rc.save():
+        log("menu bars on every screen drawn alike")
+
+
 def menu_bar(tree):
     path = Path(tree) / "plasma-org.kde.plasma.desktop-appletsrc"
     if not path.exists():
@@ -275,6 +303,7 @@ def menu_bar(tree):
     for cid in menu_bars(cfg):
         fix_menu_bar(cfg, cid)
     menu_bar_every_screen(cfg, tree, screen_count())
+    menu_bar_views(cfg, tree)
     if cfg.save():
         log("menu bar items set to Battery, Wi-Fi, Spotlight, Control Center, clock")
 
@@ -592,10 +621,105 @@ def no_windows_effects(tree):
         log("KWin: Windows 7's effects off in this look")
 
 
+def plasma_script(path):
+    """Runs a Plasma desktop script; again while Plasma is still starting (no answer
+    yet, or the script says "not ready")."""
+    import time
+    q = shutil.which("qdbus6") or shutil.which("qdbus")
+    if not q:
+        return ""
+    out = ""
+    for _ in range(60):
+        r = subprocess.run([q, "org.kde.plasmashell", "/PlasmaShell", "org.kde.PlasmaShell.evaluateScript",
+                            Path(path).read_text()], capture_output=True, text=True)
+        out = r.stdout.strip()
+        if r.returncode == 0 and "not ready" not in out:
+            return out
+        time.sleep(1)
+    return out
+
+
+def screens_live():
+    """The menu bar on every screen (screens.js), at login and whenever screens are
+    plugged in or rearranged while the session runs."""
+    import time
+    # Plasma puts its panels on their screens in the first seconds after it starts:
+    # judging before that, a screen can look bare and get a second menu bar.
+    for _ in range(60):
+        age = subprocess.run(["ps", "-o", "etimes=", "-C", "plasmashell"], capture_output=True, text=True).stdout.split()
+        if age:
+            age = min(int(a) for a in age)
+            if age >= 15:
+                break
+            time.sleep(15 - age)
+        else:
+            time.sleep(1)
+    out = plasma_script(HERE / "screens.js")
+    if not out or out.endswith("added: "):
+        return
+    log(out)
+    # How Plasma draws a bar (glass behind each item) is read only when Plasma starts:
+    # give the new bars the main bar's look, then start Plasma again (a second's blink,
+    # only when a screen got a new bar).
+    tree = (HOME / ".config").resolve()
+    subprocess.run(["systemctl", "--user", "stop", "plasma-plasmashell.service"], check=False)
+    try:
+        menu_bar_views(KConfig(tree / "plasma-org.kde.plasma.desktop-appletsrc"), tree)
+    finally:
+        subprocess.run(["systemctl", "--user", "start", "plasma-plasmashell.service"], check=False)
+
+
+def screens_watcher(tree):
+    """Runs screens_live whenever KDE saves a screen layout (a screen plugged in,
+    unplugged or moved). The unit lives in this look's own config, so it only runs
+    in the Tahoe session."""
+    unit_dir = Path(tree) / "systemd/user"
+    wants = unit_dir / "default.target.wants"
+    wants.mkdir(parents=True, exist_ok=True)
+    units = {
+        "kali-looks-tahoe-screens.path": """[Unit]
+Description=kali-looks: the Tahoe menu bar on every screen, when screens change
+
+[Path]
+PathChanged=%h/.local/share/kscreen
+Unit=kali-looks-tahoe-screens.service
+
+[Install]
+WantedBy=default.target
+""",
+        "kali-looks-tahoe-screens.service": f"""[Unit]
+Description=kali-looks: the Tahoe menu bar on every screen
+
+[Service]
+Type=oneshot
+ExecStartPre=/bin/sleep 3
+ExecStart=/usr/bin/python3 {HERE / 'tahoe-finish.py'} --screens
+""",
+    }
+    for name, text in units.items():
+        f = unit_dir / name
+        if not f.exists() or f.read_text() != text:
+            f.write_text(text)
+            log(f"wrote {name}")
+    link = wants / "kali-looks-tahoe-screens.path"
+    if not link.exists():
+        link.symlink_to("../kali-looks-tahoe-screens.path")
+
+
 def main():
+    if sys.argv[1:] == ["--screens"]:
+        screens_live()
+        return
+    if sys.argv[1:] == ["--live"]:
+        # once the session is up: the watcher on, then every screen checked
+        subprocess.run(["systemctl", "--user", "daemon-reload"], check=False)
+        subprocess.run(["systemctl", "--user", "start", "kali-looks-tahoe-screens.path"], check=False)
+        screens_live()
+        return
     if len(sys.argv) != 2:
         sys.exit(__doc__)
     tree = sys.argv[1]
+    screens_watcher(tree)
     install_plasmoids()
     kvantum(tree)
     glass(tree)

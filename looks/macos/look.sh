@@ -28,6 +28,8 @@ look_prepare() {
 look_setup() {
   # Finder's full menu (Finder, File, Edit, View, Go, Window, Help) in the menu bar
   python3 "$LOOK_DIR/patch-finder-menu.py" "$MAC_SRC" || warn "Couldn't patch the Finder menu"
+  # the bold "Finder" menu opens (About Finder, Settings, Empty Trash, Hide, Show All)
+  python3 "$LOOK_DIR/patch-finder-app-menu.py" "$MAC_SRC" || warn "Couldn't patch Finder's own menu"
   # menu bar text white over the wallpaper (black over a very light one), as on a Mac
   python3 "$LOOK_DIR/patch-menubar-ink.py" "$MAC_SRC" || warn "Couldn't patch the menu bar colors"
   # Dock icons unchanged under the pointer, names only; menus' shortcuts in Mac symbols
