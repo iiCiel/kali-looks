@@ -303,6 +303,9 @@ cmd_session_hook() {
     stop_look_units
     stop_config_daemons
     point_config "$target" && ok=1
+    # services started before the session's own environment arrives (portals, Plasma's
+    # helpers) read this look's settings, not the last session's
+    systemctl --user set-environment XDG_CONFIG_HOME="$target" DESKTOP_SESSION="$ds" 2>/dev/null || true
     swap_home_files "$prev" "$look" || echo "warning: couldn't swap the pointer/GTK2 files"
     swap_look_files "$look" "$prev"
     state_set ACTIVE "$look"
@@ -324,6 +327,7 @@ cmd_session_hook() {
       # and fonts (dark menus, wrong font). KDE uses its own platform theme.
       systemctl --user unset-environment QT_QPA_PLATFORMTHEME 2>/dev/null || true
       install_session_start "$target"
+      fill_wallpapers "$look" "$target"
       ensure_current_activity "$target"
       [[ -x $HERE/looks/$look/before-session ]] && "$HERE/looks/$look/before-session" "$target"
     fi
@@ -368,10 +372,13 @@ restore_session_env() {
 # and desktop shell.
 LOOK_ENV_VARS=(USE_UAC_AGENT PLASMA_DEFAULT_SHELL QML_DISABLE_DISTANCEFIELD)
 clear_look_env() {
+  # D-Bus can't unset, only set empty. dbus-broker also hands those empty values on
+  # to systemd, and an empty PLASMA_DEFAULT_SHELL makes plasmashell look for a shell
+  # named "" and quit (black screen in every Plasma look after Windows 7). So blank
+  # them in D-Bus first, then really unset them in systemd.
+  dbus-update-activation-environment "${LOOK_ENV_VARS[@]/%/=}" XDG_CONFIG_DIRS=/etc/xdg 2>/dev/null || true
   systemctl --user unset-environment "${LOOK_ENV_VARS[@]}" 2>/dev/null || true
   systemctl --user set-environment XDG_CONFIG_DIRS=/etc/xdg 2>/dev/null || true
-  # (D-Bus can't unset: empty is "not set" for all of them)
-  dbus-update-activation-environment "${LOOK_ENV_VARS[@]/%/=}" XDG_CONFIG_DIRS=/etc/xdg 2>/dev/null || true
 }
 
 # The last look's background units (they live in its own config folder) stop with it;
@@ -491,10 +498,53 @@ ExecStart=/bin/sh -c 'if [ -n "\$USE_UAC_AGENT" ] && [ -x $lib/kf6/uac-polkit-ag
 EOF
 }
 
+# The KDE backend is plasma-xdg-desktop-portal-kde: it answers apps' "light or dark?"
+# from the settings folder it started with, so one left over from another session (Xfce
+# at boot) made every app of a light look dark.
 reset_portals() { # reset_portals stop|restart
-  local u=(xdg-desktop-portal.service xdg-desktop-portal-gtk.service xdg-desktop-portal-kde.service)
+  local u=(xdg-desktop-portal.service xdg-desktop-portal-gtk.service
+           plasma-xdg-desktop-portal-kde.service xdg-desktop-portal-kde.service)
   if [[ $1 == stop ]]; then systemctl --user stop "${u[@]}" 2>/dev/null || true
-  else systemctl --user stop "${u[1]}" 2>/dev/null; systemctl --user try-restart "${u[0]}" 2>/dev/null || true; fi
+  else systemctl --user stop "${u[@]:1}" 2>/dev/null; systemctl --user try-restart "${u[0]}" 2>/dev/null || true; fi
+}
+
+# The look's own wallpaper (LOOK_WALLPAPER in its look.sh), with ~ and $HOME filled in.
+look_wallpaper() { # look_wallpaper <look>
+  ( load_look "$1" >/dev/null 2>&1 || exit 0; echo "${LOOK_WALLPAPER:-}" )
+}
+
+# A desktop without a wallpaper image of its own shows Plasma's stock blue "Next"
+# picture, and the lock screen Kali's blue login background. Before Plasma starts, give
+# every desktop of the look that has none, and its lock screen, the look's wallpaper
+# (one you picked yourself stays).
+fill_wallpapers() { # fill_wallpapers <look> <look config tree>
+  local wp f n; wp=$(look_wallpaper "$1"); [[ -n $wp ]] || return 0
+  for f in "$2"/plasma-*-appletsrc; do
+    [[ -f $f ]] || continue
+    n=$(python3 "$HERE/lib/wallpapers.py" config "$f" "$wp" 2>/dev/null) || continue
+    [[ ${n:-0} -gt 0 ]] && echo "wallpapers: $n desktop(s) in $(basename "$f") got the $1 wallpaper"
+  done
+  n=$(python3 "$HERE/lib/wallpapers.py" lock "$2" "$wp" 2>/dev/null) || true
+  [[ ${n:-0} -gt 0 ]] && echo "wallpapers: lock screen got the $1 wallpaper"
+  true
+}
+
+# Same thing in the running session, for desktops Plasma makes for a screen it sees
+# for the first time; repeats when a screen is plugged in or removed.
+apply_wallpapers() { # apply_wallpapers <qdbus> <wallpaper>
+  "$1" org.kde.plasmashell /PlasmaShell org.kde.PlasmaShell.evaluateScript \
+    "$(python3 "$HERE/lib/wallpapers.py" script "$2")" 2>/dev/null
+}
+watch_screens_for_wallpapers() { # watch_screens_for_wallpapers <qdbus> <wallpaper>
+  local last now
+  last=$(xrandr --listmonitors 2>/dev/null | head -1)
+  while pgrep -u "$(id -u)" -x plasmashell >/dev/null; do
+    sleep 5
+    now=$(xrandr --listmonitors 2>/dev/null | head -1)
+    if [[ $now != "$last" ]]; then
+      last=$now; sleep 3; apply_wallpapers "$1" "$2" >/dev/null
+    fi
+  done
 }
 
 install_session_start() { # install_session_start <look config tree>
@@ -512,7 +562,7 @@ EOF
 }
 
 # Runs inside a Plasma look once it's up: portal on Plasma's settings, and screens
-# that never got a wallpaper (setup ran on one hidden screen) get screen 1's.
+# that never got a wallpaper get the look's (or, for a look without one, screen 1's).
 cmd_session_start() {
   restore_session_env
   local look; look=$(current_look)
@@ -523,13 +573,19 @@ cmd_session_start() {
   reset_portals restart
   local q; q=$(command -v qdbus6 || command -v qdbus) || return 0
   local i; for i in $(seq 20); do "$q" org.kde.plasmashell /PlasmaShell >/dev/null 2>&1 && break; sleep 1; done
-  "$q" org.kde.plasmashell /PlasmaShell org.kde.PlasmaShell.evaluateScript '
-    var ds = desktops(), img = "", g = ["Wallpaper","org.kde.image","General"];
-    for (var i = 0; i < ds.length; i++) if (ds[i].screen == 0 && ds[i].wallpaperPlugin == "org.kde.image") {
-      ds[i].currentConfigGroup = g; img = ds[i].readConfig("Image"); }
-    if (img != "") for (var i = 0; i < ds.length; i++) {
-      var d = ds[i]; if (d.wallpaperPlugin != "org.kde.image") continue;
-      d.currentConfigGroup = g; if (d.readConfig("Image") == "") d.writeConfig("Image", img); }' >/dev/null 2>&1 || true
+  local wp; wp=$(look_wallpaper "$look")
+  if [[ -n $wp ]]; then
+    apply_wallpapers "$q" "$wp" >/dev/null || true
+    ( watch_screens_for_wallpapers "$q" "$wp" ) >/dev/null 2>&1 &
+  else
+    "$q" org.kde.plasmashell /PlasmaShell org.kde.PlasmaShell.evaluateScript '
+      var ds = desktops(), img = "", g = ["Wallpaper","org.kde.image","General"];
+      for (var i = 0; i < ds.length; i++) if (ds[i].screen == 0 && ds[i].wallpaperPlugin == "org.kde.image") {
+        ds[i].currentConfigGroup = g; img = ds[i].readConfig("Image"); }
+      if (img != "") for (var i = 0; i < ds.length; i++) {
+        var d = ds[i]; if (d.wallpaperPlugin != "org.kde.image") continue;
+        d.currentConfigGroup = g; if (d.readConfig("Image") == "") d.writeConfig("Image", img); }' >/dev/null 2>&1 || true
+  fi
   echo "$(date '+%F %T') session-start look=$(current_look)" >>"$SESSION_LOG"
 }
 

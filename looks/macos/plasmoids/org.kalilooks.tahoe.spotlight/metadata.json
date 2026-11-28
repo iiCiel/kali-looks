@@ -1,0 +1,14 @@
+{
+  "KPackageStructure": "Plasma/Applet",
+  "KPlugin": {
+    "Id": "org.kalilooks.tahoe.spotlight",
+    "Name": "Spotlight",
+    "Description": "The menu bar's Spotlight button: opens KRunner, KDE's search",
+    "Icon": "system-search",
+    "Category": "Utilities",
+    "License": "GPL-3.0-or-later",
+    "Authors": [{ "Name": "kali-looks" }],
+    "Website": "https://github.com/iiCiel/kali-looks"
+  },
+  "X-Plasma-API-Minimum-Version": "6.0"
+}

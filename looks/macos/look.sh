@@ -8,6 +8,8 @@
 # leaves out the parts that would reach outside this session (Firefox, login and boot screens).
 
 LOOK_TITLE="macOS Tahoe"
+# Tahoe's own wallpaper package (light/dark picture follows the appearance)
+LOOK_WALLPAPER="$HOME/.local/share/wallpapers/MacTahoe/"
 MAC_REPO="https://github.com/lestercorderomurillo/macos-tahoe-liquid-kde.git"
 MAC_COMMIT="aa482a96a689694564d0cec22987e35291274afb"   # 0.85.2
 MAC_SRC="$SRC_DIR/macos-tahoe"
@@ -22,6 +24,8 @@ look_prepare() {
 }
 
 look_setup() {
+  # Finder's full menu (Finder, File, Edit, View, Go, Window, Help) in the menu bar
+  python3 "$LOOK_DIR/patch-finder-menu.py" "$MAC_SRC" || warn "Couldn't patch the Finder menu"
   log "Installing macOS Tahoe into its session (asks for your password; takes a few minutes)"
   # shellcheck disable=SC2016
   look_root env MTTKDE_NO_CONFIRM=1 MAC_TAHOE_NO_UPDATE_CHECK=true MTTKDE_NO_GRUB_MODIFY=1 \
@@ -31,6 +35,9 @@ look_setup() {
     || die "The macOS installer failed; see $DATA_DIR/macos-install.log"
   grep -q 'mac-tahoe\|mac\.tahoe' "$LOOK_CFG/plasma-org.kde.plasma.desktop-appletsrc" 2>/dev/null \
     || die "The macOS layout didn't land in this look's settings; see $DATA_DIR/macos-install.log"
+  # Menu bar, app colors, wallpaper and lock screen as on a real Tahoe Mac (also runs
+  # before every Tahoe session: see before-session)
+  python3 "$LOOK_DIR/tahoe-finish.py" "$LOOK_CFG" || warn "Couldn't finish the Tahoe menu bar"
   # Desktop icons line up down the right edge, as on a Mac
   look_run qdbus6 org.kde.plasmashell /PlasmaShell org.kde.PlasmaShell.evaluateScript "
     desktops().forEach(function (d) {

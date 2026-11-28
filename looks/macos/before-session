@@ -1,0 +1,4 @@
+#!/bin/sh
+# kali-looks: runs before every macOS Tahoe session, while Plasma isn't running yet.
+# $1 = the look's config tree.
+exec python3 "$(dirname "$(readlink -f "$0")")/tahoe-finish.py" "$1"

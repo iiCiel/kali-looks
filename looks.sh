@@ -12,6 +12,7 @@
 #   looks auth [remove]            one password covers 30 minutes of admin prompts
 #   looks desktop-rights [remove]  Turn Off, network, USB drives without an admin password
 #   looks sandbox <look> start|stop|shot NAME|run CMD   a hidden session, for testing
+#   looks wallpaper [look]         a look's wallpaper; fills in screens showing Plasma's blue default
 #   looks help
 set -Eeuo pipefail
 
@@ -173,7 +174,7 @@ cmd_install() {
   ok "Installed: $BIN_DIR/looks  (make sure $BIN_DIR is on your PATH)"
 }
 
-usage() { sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'; }
 
 case "${1:-help}" in
   list|ls|status) cmd_list ;;
@@ -199,6 +200,16 @@ case "${1:-help}" in
   session-hook) cmd_session_hook "${2:-}" ;;
   session-start) cmd_session_start ;;
   sandbox) shift; cmd_sandbox "$@" ;;
+  wallpaper)
+    look=${2:-$(current_look)}; wp=$(look_wallpaper "$look")
+    [[ -n $wp ]] || die "No wallpaper set for '$look'."
+    echo "$wp"
+    if [[ $(current_look) == "$look" ]] && q=$(command -v qdbus6 || command -v qdbus); then
+      echo "screens filled in now: $(apply_wallpapers "$q" "$wp" || echo 0)"
+      python3 "$HERE/lib/wallpapers.py" lock "$CFG_ROOT/$look" "$wp" >/dev/null || true
+    else
+      fill_wallpapers "$look" "$CFG_ROOT/$look"
+    fi ;;
   -h|--help|help) usage ;;
   --version) echo "looks $LOOKS_VERSION" ;;
   *) usage; exit 2 ;;

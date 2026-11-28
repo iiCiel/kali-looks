@@ -25,7 +25,7 @@ kali-looks doesn't draw its own imitation. It installs the best existing project
 
 | Look | Built on | What you get |
 |---|---|---|
-| **macOS Tahoe** | [macOS Tahoe Shell for KDE](https://github.com/lestercorderomurillo/macos-tahoe-liquid-kde) by Lester Cordero Murillo and contributors | Menu bar with the app's own menus, Control Center, Liquid Glass dock with magnification, Launchpad, Spotlight-style search, SF Pro, Tahoe icons, cursors, sounds and wallpapers, rounded windows with traffic-light buttons |
+| **macOS Tahoe** | [macOS Tahoe Shell for KDE](https://github.com/lestercorderomurillo/macos-tahoe-liquid-kde) by Lester Cordero Murillo and contributors | Menu bar with the app's own menus, Control Center, Liquid Glass dock with magnification, Launchpad, Spotlight-style search, SF Pro, Tahoe icons, cursors, sounds and wallpapers, rounded windows with traffic-light buttons. kali-looks adds what a real Tahoe Mac has on top: the menu bar on every screen with Battery, Wi-Fi, Spotlight, Control Center and the clock, Finder's full menu, light app colors, and the Tahoe wallpaper on the desktop and lock screen |
 | **Windows XP** | [XPlasma Plus](https://github.com/ergosteur/XPlasma-Plus), a fork of hotsocket's [XPlasma](https://tangled.org/hotsocket.fyi/xplasma) | Renders XP's real Luna visual style: Start menu, taskbar and tray, window borders, Qt and GTK controls, Tahoma, XP icons, pointers and sounds, Bliss, XP logout dialogs and lock screen |
 | **Windows 7** | [AeroThemePlasma](https://github.com/aeroshell-desktop/aerothemeplasma) by the AeroShell project | Aero glass, Superbar, Start orb and menu, Aero Peek and Snap, Windows 7 frames, icons, cursors, sounds, Segoe UI |
 
@@ -40,6 +40,8 @@ Left out on purpose, because they'd reach outside the look's own session: Firefo
 - Sessions that start without `~/.xsessionrc` (Plasma on Wayland, Xfce on Wayland, the plain Plasma session) are hidden from the login screen, since they'd run on whichever look's settings were used last. `looks sessions remove` brings them back.
 - A remote desktop session (Chrome Remote Desktop) always uses your own settings and never moves `~/.config`.
 - `looks setup` runs each look's installer inside a hidden session (its own X display and D-Bus), so your screen isn't touched while it installs.
+- Every screen of a look, and its lock screen, gets the look's wallpaper, also a screen you plug in later (no Plasma "Next" or Kali blue). `looks wallpaper` fills in any screen that still shows it.
+- Desktop portals (which tell apps light or dark, and open file dialogs) restart with each look's settings.
 - `looks reset <look>` starts a look over from scratch (the old settings are kept in a backup). `looks sessions remove` turns `~/.config` back into a plain folder.
 
 ## Fewer password prompts (optional)

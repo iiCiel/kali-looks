@@ -9,6 +9,7 @@
 # (its own Firefox ESR and profile) is the XP session's browser; xp-finish.py sets that up.
 
 LOOK_TITLE="Windows XP"
+LOOK_WALLPAPER="file://$HOME/.local/share/xplasma/assets/wallpapers/Bliss.jpg"
 XP_VERSION="1.0.4-beta.2"
 XP_URL="https://github.com/ergosteur/XPlasma-Plus/releases/download/v$XP_VERSION/xplasma-plus-$XP_VERSION-installer-generic.tar.gz"
 XP_SHA256="e222821f67091a0362ba91384cb9c2fc77ee854dc0a6dcfe7def43b27345f8fc"

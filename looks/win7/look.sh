@@ -9,6 +9,9 @@
 # rebuild: `looks rebuild win7`. `looks remove win7` undoes everything.
 
 LOOK_TITLE="Windows 7"
+# your own picture if you saved one as win7-wallpaper.jpg, else the Aero one
+LOOK_WALLPAPER="file://$HOME/.local/share/wallpapers/kali-looks-aero/aero.jpg"
+[[ -f ${DATA_DIR:-$HOME/.local/share/kali-looks}/win7-wallpaper.jpg ]] && LOOK_WALLPAPER="file://${DATA_DIR:-$HOME/.local/share/kali-looks}/win7-wallpaper.jpg"
 
 # Pinned upstreams: "<dir> <url> <commit>"
 W7_BRANCH="Plasma/6.7"
