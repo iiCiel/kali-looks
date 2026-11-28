@@ -1,21 +1,85 @@
-#!/bin/sh
-# kali-looks-at-laptop USER ACTION
-#
-# Asked by polkit (lib/root/48-kali-looks-desktop.rules): if USER is logged in at the
-# laptop right now (an active session on seat0), print what ACTION allows someone at
-# the laptop ("implicit active": yes, auth_self, auth_admin_keep, ...). Otherwise print
-# "none". Read-only: it only asks logind and polkit.
-user=$1 action=$2
-case $user in ''|*[!a-z0-9_-]*) echo none; exit 0 ;; esac
-case $action in ''|*[!A-Za-z0-9._-]*) echo none; exit 0 ;; esac
+#!/usr/bin/python3 -I
+"""kali-looks-at-laptop USER ACTION
 
-at=no
-for s in $(loginctl show-user "$user" -p Sessions --value 2>/dev/null); do
-  if [ "$(loginctl show-session "$s" -p Seat --value 2>/dev/null)" = seat0 ] &&
-     [ "$(loginctl show-session "$s" -p Active --value 2>/dev/null)" = yes ]; then
-    at=yes
-  fi
-done
-[ $at = yes ] || { echo none; exit 0; }
+Asked by polkit (lib/root/48-kali-looks-desktop.rules): if USER is logged in at the
+laptop right now (an active session on seat0), print what ACTION allows someone at
+the laptop (its "allow_active" default: yes, auth_self, auth_admin_keep, ...).
+Otherwise print "none".
 
-pkaction --action-id "$action" --verbose 2>/dev/null | sed -n 's/^ *implicit active: *//p' | head -n 1
+It reads files only (logind's state in /run/systemd and the actions in
+/usr/share/polkit-1/actions). It must not ask polkit or logind over D-Bus: polkit is
+waiting on this answer, so asking it back would hang every permission check.
+"""
+import pwd
+import re
+import sys
+import xml.etree.ElementTree as ET
+from pathlib import Path
+
+
+def answer(text):
+    print(text)
+    sys.exit(0)
+
+
+def keyvals(path):
+    out = {}
+    try:
+        for line in Path(path).read_text().splitlines():
+            if "=" in line:
+                k, v = line.split("=", 1)
+                out[k] = v
+    except OSError:
+        pass
+    return out
+
+
+def at_laptop(user):
+    try:
+        uid = pwd.getpwnam(user).pw_uid
+    except KeyError:
+        return False
+    for s in keyvals(f"/run/systemd/users/{uid}").get("SESSIONS", "").split():
+        if not re.fullmatch(r"[A-Za-z0-9]+", s):
+            continue
+        info = keyvals(f"/run/systemd/sessions/{s}")
+        if info.get("SEAT") == "seat0" and info.get("ACTIVE") == "1" and info.get("REMOTE", "0") == "0":
+            return True
+    return False
+
+
+def active_default(action):
+    files = sorted(Path("/usr/share/polkit-1/actions").glob("*.policy"))
+    # the file named after the action's start is nearly always the one: look there first
+    files.sort(key=lambda f: not action.startswith(f.stem.rsplit(".", 1)[0]))
+    for f in files:
+        try:
+            text = f.read_text()
+        except OSError:
+            continue
+        if f'"{action}"' not in text:
+            continue
+        try:
+            root = ET.fromstring(text)
+        except ET.ParseError:
+            continue
+        for a in root.iter("action"):
+            if a.get("id") == action:
+                v = a.findtext("defaults/allow_active")
+                return v.strip() if v else "no"
+    return "none"
+
+
+def main():
+    if len(sys.argv) != 3:
+        answer("none")
+    user, action = sys.argv[1], sys.argv[2]
+    if not re.fullmatch(r"[a-z_][a-z0-9_-]*", user) or not re.fullmatch(r"[A-Za-z0-9._-]+", action):
+        answer("none")
+    if not at_laptop(user):
+        answer("none")
+    answer(active_default(action))
+
+
+if __name__ == "__main__":
+    main()
