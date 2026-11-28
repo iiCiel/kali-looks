@@ -732,6 +732,7 @@ logout_now() {
 cmd_switch() {
   local pick=${1:-} cur s id look name i
   local -a ids=(base) names=("Kali (Xfce)") args=()
+  [[ -d ${XDG_DATA_HOME:-$HOME/.local/share}/cupertino-xfce/app ]] && names=("macOS (Xfce)")
   cur=$(current_look)
   for s in "${LOOK_SESSIONS[@]}"; do
     IFS='|' read -r id look name _ <<<"$s"
@@ -749,6 +750,7 @@ cmd_switch() {
     fi
   fi
   [[ -n $pick ]] || return 0
+  [[ $pick == xfce ]] && pick=base
   if [[ $pick == base ]]; then id=$(base_session_id); else id="kali-looks-$pick"; fi
   [[ $pick == base || -f /usr/share/xsessions/$id.desktop ]] || die "No login session for '$pick'. Run: looks sessions"
   set_next_session "$id"

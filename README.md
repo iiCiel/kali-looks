@@ -1,12 +1,13 @@
 # kali-looks
 
-Pick your desktop at the login screen: **macOS Tahoe**, **Windows XP** or **Windows 7**, next to your normal Kali (Xfce) desktop. Each look is its own login session with its own settings, built on the most faithful replica that exists for it. Built on Kali Linux (Plasma 6.7, X11).
+Dress your normal Kali (Xfce) desktop as **macOS**, and pick **macOS Tahoe**, **Windows XP** or **Windows 7** at the login screen next to it. Each of those three is its own login session with its own settings, built on the most faithful replica that exists for it. Built on Kali Linux (Xfce 4.20, Plasma 6.7, X11).
 
 ```bash
 git clone https://github.com/iiCiel/kali-looks.git
 cd kali-looks
 ./looks.sh install          # puts the `looks` command in ~/.local/bin
 
+looks setup xfce            # macOS for your normal Kali desktop (run it inside Xfce)
 looks setup macos           # each takes a few minutes and asks for your password
 looks setup winxp
 looks setup win7            # compiles AeroThemePlasma the first time (10-30 min)
@@ -15,9 +16,9 @@ looks sessions              # puts them on the login screen
 
 Then log out and choose a look from the login screen's session menu. To change looks later, open **Switch Look** from any of them (or run `looks switch`): it logs you out with the next look preselected.
 
-| macOS Tahoe | Windows XP | Windows 7 |
-|---|---|---|
-| ![macOS Tahoe look](screenshots/macos.jpg) | ![Windows XP look](screenshots/winxp.jpg) | ![Windows 7 look](screenshots/win7.jpg) |
+| macOS (Xfce) | macOS Tahoe | Windows XP | Windows 7 |
+|---|---|---|---|
+| ![macOS look for Xfce](looks/xfce/screenshots/desktop-light.jpg) | ![macOS Tahoe look](screenshots/macos.jpg) | ![Windows XP look](screenshots/winxp.jpg) | ![Windows 7 look](screenshots/win7.jpg) |
 
 ## The looks
 
@@ -25,11 +26,12 @@ kali-looks doesn't draw its own imitation. It installs the best existing project
 
 | Look | Built on | What you get |
 |---|---|---|
+| **macOS (Xfce)** | [looks/xfce](looks/xfce) (formerly cupertino-xfce), with [WhiteSur](https://github.com/vinceliuice/WhiteSur-gtk-theme) by Vince Liuice and [Plank Reloaded](https://github.com/zquestz/plank-reloaded) | Your normal Kali desktop as macOS: global menu bar, Control Center, magnifying dock, Spotlight, Launchpad, Mission Control, light and dark mode, blur and rounded corners, Mac shortcuts, login screen and boot splash. It has no session of its own and installs into your own Xfce settings; `looks remove xfce` puts them back. Options and details: [looks/xfce/README.md](looks/xfce/README.md) |
 | **macOS Tahoe** | [macOS Tahoe Shell for KDE](https://github.com/lestercorderomurillo/macos-tahoe-liquid-kde) by Lester Cordero Murillo and contributors | Menu bar with the app's own menus, Control Center, Liquid Glass dock with magnification, Launchpad, Spotlight-style search, SF Pro, Tahoe icons, cursors, sounds and wallpapers, rounded windows with traffic-light buttons. kali-looks adds what a real Tahoe Mac has on top: the menu bar on every screen with Battery, Wi-Fi, Spotlight, Control Center and the clock, Finder's full menu, light app colors, and the Tahoe wallpaper on the desktop and lock screen |
 | **Windows XP** | [XPlasma Plus](https://github.com/ergosteur/XPlasma-Plus), a fork of hotsocket's [XPlasma](https://tangled.org/hotsocket.fyi/xplasma) | Renders XP's real Luna visual style: Start menu, taskbar and tray, window borders, Qt and GTK controls, Tahoma, XP icons, pointers and sounds, Bliss, XP logout dialogs and lock screen |
 | **Windows 7** | [AeroThemePlasma](https://github.com/aeroshell-desktop/aerothemeplasma) by the AeroShell project | Aero glass, Superbar, Start orb and menu, Aero Peek and Snap, Windows 7 frames, icons, cursors, sounds, Segoe UI |
 
-Left out on purpose, because they'd reach outside the look's own session: Firefox theming, login-screen themes (Kali uses LightDM) and boot splashes.
+Left out of the session looks on purpose, because they'd reach outside the look's own session: Firefox theming, login-screen themes (Kali uses LightDM) and boot splashes. The Xfce look does theme those, since it's your main desktop (skip them with `looks setup xfce --no-firefox --no-login --no-boot-splash`).
 
 ## How the sessions stay separate
 
@@ -60,7 +62,8 @@ AeroThemePlasma is a deep modification of Plasma, not a theme:
 
 ## Credits and licences
 
-kali-looks itself is MIT. The projects it installs keep their own licences and credits:
+kali-looks itself is MIT, including looks/xfce and its wallpapers, boot splash, dock themes and Control Center. The projects it installs keep their own licences and credits:
+- WhiteSur GTK and Firefox themes: MIT; WhiteSur icons and cursors: GPL-3.0; Plank Reloaded: GPL-3.0 / LGPL-2.1 (more in [looks/xfce/README.md](looks/xfce/README.md#credits))
 - macOS Tahoe Shell for KDE: GPL-3.0
 - XPlasma Plus / XPlasma: GPL-3.0. Its XP artwork, fonts and sounds are Microsoft's and are downloaded from XPlasma Plus' release, not from this repository.
 - AeroThemePlasma: AGPL-3.0

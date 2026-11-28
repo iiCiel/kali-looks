@@ -1,6 +1,6 @@
-# cupertino-xfce
+# macOS for Xfce (formerly cupertino-xfce)
 
-**Make Xfce look and feel like macOS, with one script.**
+**Make Xfce look and feel like macOS, with one command.** Part of [kali-looks](../../README.md): this folder was its own repository, cupertino-xfce, until 0.1.0.
 Built on Kali Linux (Xfce 4.20) and tested on a clean Ubuntu 26.04 Xfce system. Aimed at Kali, Debian 13 and other recent Debian-based Xfce setups.
 
 ![cupertino-xfce in light mode: global menu bar, Finder-style Files window, magnifying dock](screenshots/desktop-light.jpg)
@@ -38,11 +38,14 @@ Built on Kali Linux (Xfce 4.20) and tested on a clean Ubuntu 26.04 Xfce system. 
 ## Install
 
 ```bash
-git clone https://github.com/iiCiel/cupertino-xfce.git
-cd cupertino-xfce
-./install.sh --dry-run   # optional: check your system, change nothing
-./install.sh             # light mode   (or: ./install.sh --dark)
+git clone https://github.com/iiCiel/kali-looks.git
+cd kali-looks
+./looks.sh install           # puts the `looks` command in ~/.local/bin
+looks setup xfce --dry-run   # optional: check your system, change nothing
+looks setup xfce             # light mode   (or: looks setup xfce --dark)
 ```
+
+`looks setup xfce` runs this folder's `install.sh` and passes the options below to it; `./install.sh` from this folder works the same.
 
 Run it as your normal user from a terminal **inside your Xfce session**. It asks for your password when it needs root: once to install packages, and once for the login screen, terminal colours and boot splash. Rebuilding the boot splash takes about a minute.
 
@@ -69,8 +72,8 @@ Set `CUPERTINO_ROOT=pkexec` to get a graphical password prompt instead of `sudo`
 ## Uninstall
 
 ```bash
-./uninstall.sh           # restore your desktop as it was before the first install
-./uninstall.sh --purge   # …and also remove the themes, wallpapers and added packages
+looks remove xfce        # restore your desktop as it was before the first install
+./uninstall.sh --purge   # (from this folder) …and also remove the themes, wallpapers and added packages
 ```
 
 Backups live in `~/.local/share/cupertino-xfce/backups/`. Each holds your previous panel layout, the original value of every setting the installer touched, your `gtk.css`, `qterminal.ini`, Firefox `chrome` folder and `user.js`, and your original login-screen config and boot-splash name. Installing twice (say light, then dark) is fine: the uninstaller walks every backup so your original settings win.
@@ -114,7 +117,7 @@ The standard menus work by sending the app its usual keyboard shortcut (Copy sen
 
 ## On KDE Plasma?
 
-[kali-looks](https://github.com/iiCiel/kali-looks) does the same for KDE Plasma, and can switch between macOS, Windows XP and Windows 7 looks with one command.
+The rest of [kali-looks](../../README.md) adds macOS Tahoe, Windows XP and Windows 7 as KDE Plasma sessions on the login screen, next to this desktop.
 
 ## Credits
 

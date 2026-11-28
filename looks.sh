@@ -2,7 +2,7 @@
 # looks: whole-desktop looks for Kali, each its own login-screen session.
 #
 #   looks list                     the looks, and which are set up
-#   looks setup <look>             install or update a look (macos, winxp, win7)
+#   looks setup <look>             install or update a look (macos, winxp, win7, xfce)
 #   looks sessions                 put the set-up looks on the login screen
 #   looks switch [look]            log out and come back as another look ("base" = Xfce)
 #   looks reset <look>             start a look's settings over from scratch
@@ -62,18 +62,24 @@ look_root() {
 
 # ---- commands ---------------------------------------------------------------------
 
-look_ready() { [[ -e $CFG_ROOT/$1/.ready ]]; }
+look_ready() {
+  ( load_look "$1" >/dev/null 2>&1 || exit 1
+    if declare -F look_is_ready >/dev/null; then look_is_ready; else [[ -e $LOOK_CFG/.ready ]]; fi )
+}
 
 cmd_list() {
-  local id title cur state
+  local id title cur state info here
   cur=$(current_look)
   echo "Looks:"
   for id in $(all_looks); do
-    title=$( (load_look "$id"; echo "$LOOK_TITLE") )
+    info=$( (load_look "$id"; echo "${LOOK_IS_BASE:+base}|$LOOK_TITLE") )
+    title=${info#*|}; here=$id
+    # the Xfce look is your own Kali desktop, which the session tracks as "base"
+    [[ ${info%%|*} == base ]] && here=base
     if look_ready "$id"; then state="${C_GRN}set up${C_OFF}"; else state="${C_DIM}not set up: looks setup $id${C_OFF}"; fi
-    printf '  %s %-6s %-14s %s\n' "$([[ $id == "$cur" ]] && echo "*" || echo " ")" "$id" "$title" "$state"
+    printf '  %s %-6s %-14s %s\n' "$([[ $here == "$cur" ]] && echo "*" || echo " ")" "$id" "$title" "$state"
   done
-  [[ $cur == base ]] && echo "  (you're in your own Kali desktop)"
+  [[ $cur == base ]] && ! look_ready xfce && echo "  (you're in your own Kali desktop)"
   true
 }
 
@@ -82,6 +88,13 @@ cmd_setup() {
   [[ -n $id ]] || die "Which look? Try: looks list"
   load_look "$id"
   mkdir -p "$DATA_DIR" "$SRC_DIR" "$DL_DIR"
+  if [[ -n ${LOOK_IS_BASE:-} ]]; then
+    # It dresses your own Xfce desktop: no session of its own, so no hidden one to set
+    # it up in either. Its installer checks it's inside Xfce.
+    SETUP_MODE=live; look_prepare; look_setup "${@:2}"
+    ok "$LOOK_TITLE is set up. Log out and back in so every app sends its menus to the menu bar."
+    return 0
+  fi
   need_packages xvfb imagemagick pkexec git curl
   ensure_config_link || die "Couldn't turn ~/.config into a link (see above)."
   sync_look_config "$id"
@@ -109,6 +122,7 @@ cmd_reset() {
   local id=${1:-}
   [[ -n $id ]] || die "Which look?"
   load_look "$id"
+  [[ -z ${LOOK_IS_BASE:-} ]] || die "$LOOK_TITLE is your own Xfce desktop, not a separate one. To undo it: looks remove $id"
   [[ $(current_look) != "$id" ]] || die "You're logged into $LOOK_TITLE; switch to another session first."
   if [[ -d $LOOK_CFG ]]; then
     local bk; bk="$DATA_DIR/backup/$id-$(date +%Y%m%d-%H%M%S)"
@@ -199,7 +213,9 @@ case "${1:-help}" in
   desktop-rights) shift; cmd_desktop_rights "$@" ;;
   session-hook) cmd_session_hook "${2:-}" ;;
   session-start) cmd_session_start ;;
-  sandbox) shift; cmd_sandbox "$@" ;;
+  sandbox)
+    [[ ${2:-} != xfce ]] || die "macOS (Xfce) is your own Xfce desktop; it has no hidden session."
+    shift; cmd_sandbox "$@" ;;
   wallpaper)
     look=${2:-$(current_look)}; wp=$(look_wallpaper "$look")
     [[ -n $wp ]] || die "No wallpaper set for '$look'."
