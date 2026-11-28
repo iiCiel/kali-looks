@@ -57,7 +57,11 @@ Each look gets its own system's keys. On a PC keyboard, ⌘ Cmd is the Windows k
 | Close a window | Alt+F4 | Alt+F4 |
 | Force quit (then click the window) | Win+Ctrl+Esc | Win+Ctrl+Esc |
 
-KDE starts each look with these missing or switched off, so kali-looks fills them in before every login. It only writes ones that are missing or off: a shortcut you change in System Settings stays yours. The Xfce look has its own Mac shortcuts ([looks/xfce/README.md](looks/xfce/README.md)).
+The laptop's own keys work in every look too: volume, mute, mic mute, media and brightness, plus KDE's usual Alt+Tab, Show Desktop, window snapping and Lock (Win+L).
+
+A look's setup leaves KDE's global shortcuts switched off, so kali-looks turns KDE's defaults back on once per look (and again after each `looks setup`), and fills in the keys above before every login. It skips a key another action already uses, and the macOS look keeps two off on purpose: the Windows key alone opens nothing, and Win+Q isn't KDE's Activities (⌘Q quits apps on a Mac). After that it only writes shortcuts that are missing or off, so one you change in System Settings stays yours. The Xfce look has its own Mac shortcuts ([looks/xfce/README.md](looks/xfce/README.md)).
+
+If the brightness keys do nothing while Chrome Remote Desktop is installed, run `looks desktop-rights` (see below).
 
 ## Good to know
 
@@ -65,6 +69,8 @@ KDE starts each look with these missing or switched off, so kali-looks fills the
 - **Closing a window isn't quitting.** Apps like Discord, Steam or Claude keep running in the background when you close their window. Quit them from the Dock (macOS Tahoe) or their menu-bar icon.
 - **Apps reopening at login.** Plasma reopens whatever was still running when you logged out. To start every login empty: System Settings → Session → Desktop Session → *Start with an empty session*.
 - **Main screen with several monitors.** System Settings → Display Configuration → **Change Screen Priorities…**, then drag the screen you want first (Plasma 6 has no "primary" checkbox).
+- **Sleep when plugged in.** System Settings → Power Management → **On AC Power** → *Suspend session* (and *Turn off screen*). Screen Locking only sets when the lock screen comes on.
+- **One wallpaper on every screen.** In macOS Tahoe, a wallpaper you pick on one screen goes on all of them, and every screen draws it again when screens are plugged in or reordered.
 
 ## How the sessions stay separate
 
@@ -79,6 +85,10 @@ KDE starts each look with these missing or switched off, so kali-looks fills the
 - Every screen of a look, and its lock screen, gets the look's wallpaper, also a screen you plug in later (no Plasma "Next" or Kali blue). `looks wallpaper` fills in any screen that still shows it.
 - Desktop portals (which tell apps light or dark, and open file dialogs) restart with each look's settings.
 - `looks reset <look>` starts a look over from scratch (the old settings are kept in a backup). `looks sessions remove` turns `~/.config` back into a plain folder.
+
+## With Chrome Remote Desktop installed
+
+Chrome Remote Desktop starts its own desktop at boot, and the system then counts it, not the laptop, as your main session. Plasma's parts are judged by that session, so they act as if you weren't at the computer: the network icon and Turn Off ask for an admin password, and the brightness keys do nothing. `looks desktop-rights` installs a polkit rule that gives your user, in an active session, just those everyday rights back: turn off, restart and sleep; network and Wi-Fi; USB drives; screen brightness. `looks desktop-rights remove` takes it out.
 
 ## Fewer password prompts (optional)
 
