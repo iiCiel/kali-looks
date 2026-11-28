@@ -103,6 +103,7 @@ cmd_setup() {
     SETUP_MODE=live
   else
     SETUP_MODE=sandbox
+    export LOOKS_SETUP=1
     log "Starting a hidden $LOOK_TITLE session to set it up in (your screen isn't touched)"
     trap 'cmd_sandbox "$LOOK_ID" stop >/dev/null 2>&1 || true' EXIT
     cmd_sandbox "$id" start

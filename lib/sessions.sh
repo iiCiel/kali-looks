@@ -602,7 +602,8 @@ fix_sandbox_paths() { # fix_sandbox_paths <look> <stamp file>
   done < <(find "$CFG_ROOT/$look" "$HOME/.local/share" "$HOME/.themes" "$HOME/.icons" \
              "$(xdg-user-dir DESKTOP 2>/dev/null || echo "$HOME/Desktop")" \
              -path "$DATA_DIR" -prune -o -type f -newer "$stamp" -print0 2>/dev/null)
-  find "$CFG_ROOT/$look" -type f -print0 2>/dev/null | xargs -0r grep -lIF "$sb" 2>/dev/null \
+  # (no file left to fix is fine: grep finding nothing made xargs, and setup, fail)
+  find "$CFG_ROOT/$look" -type f -print0 2>/dev/null | { xargs -0r grep -lIF "$sb" 2>/dev/null || true; } \
     | while IFS= read -r f; do sed -i "s#$sb#$HOME#g" "$f"; done
   [[ $n -gt 0 ]] && log "Pointed $n setup file(s) at your home instead of the hidden session's"
   true
@@ -824,6 +825,12 @@ cmd_sandbox() {
       mkdir -p "$rt" "$DATA_DIR/sandbox/$look"; chmod 700 "$rt"
       # The look's pointer/GTK 2 files are the ones in your home while it runs here
       swap_home_files "$(current_look)" "$look"
+      # ...and its own copies of shared files (Plasma shell, launchers...), as at a real
+      # login. Without this, one look's set-up left its files in place for the next:
+      # Windows XP's installer stopped at macOS Tahoe's Plasma shell. While setting a
+      # look up, link none in: its installer writes its own (and refuses ones it didn't).
+      if [[ -n ${LOOKS_SETUP:-} ]]; then swap_look_files none "$(current_look)"
+      else swap_look_files "$look" "$(current_look)"; fi
       # Don't bring back apps from the look's last real session (they'd share your
       # browser profiles etc. on the hidden screen)
       if command -v kwriteconfig6 >/dev/null; then
@@ -873,6 +880,8 @@ cmd_sandbox() {
         else kwriteconfig6 --file "$CFG_ROOT/$look/ksmserverrc" --group General --key loginMode "$lm"; fi
         swap_home_files "$look" "$(current_look)"
       fi
+      # file what it installed or changed under this look, and put back yours
+      swap_look_files "$(current_look)" "$look"
       ok "Hidden $look session stopped" ;;
     shot)
       mkdir -p "$DATA_DIR/sandbox/$look/shots"

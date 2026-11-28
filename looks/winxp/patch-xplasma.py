@@ -16,6 +16,11 @@ FIXES = [
     ("backend.py",
      "   if path.is_symlink():links.add(str(path))",
      "   if path.is_symlink() and path not in {home/'.config',home/'.local',home/'.icons'}:links.add(str(path))  # kali-looks"),
+    # Same links, for the IE6 Firefox icons: it refused to install them through ~/.local
+    # (a link in the hidden setup session), which stopped the whole XP install.
+    ("payload/firefox/install-icon.py",
+     "  if any(p.is_symlink() for p in [dest,*dest.parents] if p!=home.parent):",
+     "  if any(p.is_symlink() for p in [dest,*dest.parents] if p!=home.parent and p not in {home/'.config',home/'.local',home/'.icons'}):"),
     # Its build-dependency step turned every "deb" line into "deb-src" instead of adding
     # one, so with one-line .list sources (Kali) no binary packages were left.
     ("dependencies.py",

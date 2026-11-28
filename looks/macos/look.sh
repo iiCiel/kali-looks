@@ -15,7 +15,9 @@ MAC_COMMIT="aa482a96a689694564d0cec22987e35291274afb"   # 0.85.2
 MAC_SRC="$SRC_DIR/macos-tahoe"
 
 look_prepare() {
-  need_packages python3-pyqt6
+  # qmake6: the Tahoe installer asks it where Qt keeps its plugins and QML (a fresh Kali
+  # doesn't have it, and the installer stops at its system check without it)
+  need_packages python3-pyqt6 qmake6
   if [[ -d $MAC_SRC/.git ]] && [[ $(git -C "$MAC_SRC" rev-parse HEAD 2>/dev/null) == "$MAC_COMMIT" ]]; then return 0; fi
   log "Downloading macOS Tahoe Shell for KDE"
   rm -rf "$MAC_SRC"
