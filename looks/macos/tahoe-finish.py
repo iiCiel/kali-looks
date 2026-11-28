@@ -7,6 +7,7 @@ step checks first and changes nothing when it's already right.
   tahoe-finish.py <look config tree>
   tahoe-finish.py --live      once the session is up (after-start)
   tahoe-finish.py --screens   when screens change (kali-looks-tahoe-screens.path)
+  tahoe-finish.py --wallpaper when a wallpaper changes (kali-looks-tahoe-wallpaper.path)
 """
 import json
 import os
@@ -669,6 +670,76 @@ def screens_live():
         subprocess.run(["systemctl", "--user", "start", "plasma-plasmashell.service"], check=False)
 
 
+WALLPAPER_STATE = HOME / ".local/share/kali-looks/tahoe-wallpaper.json"
+WALLPAPER_READ = """(function () {
+  var out = [];
+  desktops().forEach(function (d) {
+    if (d.screen < 0) return;
+    d.currentConfigGroup = ["Wallpaper", d.wallpaperPlugin, "General"];
+    var keys = d.configKeys.slice().sort(), cfg = {};
+    for (var k = 0; k < keys.length; k++) cfg[keys[k]] = String(d.readConfig(keys[k]));
+    out.push({id: d.id, screen: d.screen, plugin: d.wallpaperPlugin, cfg: cfg});
+  });
+  print(JSON.stringify(out));
+})();"""
+
+
+def wallpaper_sync():
+    """A wallpaper picked on one screen goes on every screen. Runs whenever Plasma
+    saves its desktop settings: the screen whose wallpaper differs from the one last
+    shared is the one you just changed, and the others take it."""
+    q = shutil.which("qdbus6") or shutil.which("qdbus")
+    if not q:
+        return
+    def plasma(script):
+        r = subprocess.run([q, "org.kde.plasmashell", "/PlasmaShell", "org.kde.PlasmaShell.evaluateScript", script],
+                           capture_output=True, text=True)
+        return r.stdout.strip() if r.returncode == 0 else None
+    out = plasma(WALLPAPER_READ)
+    try:
+        desks = json.loads(out) if out else []
+    except ValueError:
+        return
+    if not desks:
+        return
+    key = lambda d: json.dumps({"plugin": d["plugin"], "cfg": d["cfg"]}, sort_keys=True)
+    try:
+        last = WALLPAPER_STATE.read_text()
+    except OSError:
+        last = None
+    values = {key(d) for d in desks}
+    if len(values) == 1:
+        new = values.pop()
+    else:
+        changed = [d for d in desks if key(d) != last]
+        # nothing shared yet: the main screen's wins
+        if last is None or not changed:
+            changed = sorted(desks, key=lambda d: d["screen"])
+        picked = {key(d) for d in changed}
+        if len(picked) != 1 and last is not None:
+            changed = sorted(changed, key=lambda d: d["screen"])
+        new = key(changed[0])
+        want = json.loads(new)
+        script = "(function () { var n = 0; var want = " + json.dumps(want) + ";" + """
+  desktops().forEach(function (d) {
+    if (d.screen < 0) return;
+    if (d.wallpaperPlugin != want.plugin) d.wallpaperPlugin = want.plugin;
+    d.currentConfigGroup = ["Wallpaper", want.plugin, "General"];
+    var same = true;
+    for (var k in want.cfg) if (String(d.readConfig(k)) != want.cfg[k]) same = false;
+    if (same) return;
+    for (var k in want.cfg) d.writeConfig(k, want.cfg[k]);
+    d.reloadConfig(); n++;
+  });
+  print(n);
+})();"""
+        n = plasma(script)
+        log(f"wallpaper shared to {n} more screen(s): {want['cfg'].get('Image', want['plugin'])}")
+    if new != last:
+        WALLPAPER_STATE.parent.mkdir(parents=True, exist_ok=True)
+        WALLPAPER_STATE.write_text(new)
+
+
 def screens_watcher(tree):
     """Runs screens_live whenever KDE saves a screen layout (a screen plugged in,
     unplugged or moved). The unit lives in this look's own config, so it only runs
@@ -695,26 +766,50 @@ Type=oneshot
 ExecStartPre=/bin/sleep 3
 ExecStart=/usr/bin/python3 {HERE / 'tahoe-finish.py'} --screens
 """,
+        "kali-looks-tahoe-wallpaper.path": """[Unit]
+Description=kali-looks: a wallpaper picked on one screen goes on every screen
+
+[Path]
+PathChanged=%h/.config/plasma-org.kde.plasma.desktop-appletsrc
+Unit=kali-looks-tahoe-wallpaper.service
+
+[Install]
+WantedBy=default.target
+""",
+        "kali-looks-tahoe-wallpaper.service": f"""[Unit]
+Description=kali-looks: the same wallpaper on every screen
+
+[Service]
+Type=oneshot
+ExecStartPre=/bin/sleep 1
+ExecStart=/usr/bin/python3 {HERE / 'tahoe-finish.py'} --wallpaper
+""",
     }
     for name, text in units.items():
         f = unit_dir / name
         if not f.exists() or f.read_text() != text:
             f.write_text(text)
             log(f"wrote {name}")
-    link = wants / "kali-looks-tahoe-screens.path"
-    if not link.exists():
-        link.symlink_to("../kali-looks-tahoe-screens.path")
+    for unit in ("kali-looks-tahoe-screens.path", "kali-looks-tahoe-wallpaper.path"):
+        link = wants / unit
+        if not link.exists():
+            link.symlink_to("../" + unit)
 
 
 def main():
     if sys.argv[1:] == ["--screens"]:
         screens_live()
         return
+    if sys.argv[1:] == ["--wallpaper"]:
+        wallpaper_sync()
+        return
     if sys.argv[1:] == ["--live"]:
-        # once the session is up: the watcher on, then every screen checked
+        # once the session is up: the watchers on, then every screen checked
         subprocess.run(["systemctl", "--user", "daemon-reload"], check=False)
-        subprocess.run(["systemctl", "--user", "start", "kali-looks-tahoe-screens.path"], check=False)
+        subprocess.run(["systemctl", "--user", "start", "kali-looks-tahoe-screens.path",
+                        "kali-looks-tahoe-wallpaper.path"], check=False)
         screens_live()
+        wallpaper_sync()
         return
     if len(sys.argv) != 2:
         sys.exit(__doc__)
