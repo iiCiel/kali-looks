@@ -370,6 +370,37 @@ def kvantum(tree):
     log(f"Kvantum: apps drawn with {theme}")
 
 
+# --- the desktop's right-click menu and Spotlight --------------------------------------
+def desktop_menu(tree):
+    """A Mac's desktop menu has no "Enter Edit Mode" or "Display Configuration" (KDE's);
+    New Folder, sorting and Change Wallpaper have their KDE counterparts there already."""
+    path = Path(tree) / "plasma-org.kde.plasma.desktop-appletsrc"
+    if not path.exists():
+        return
+    cfg = KConfig(path)
+    for n in cfg.children("ActionPlugins"):
+        if cfg.get(["ActionPlugins", str(n)], "RightButton;NoModifier") != "org.kde.contextmenu":
+            continue
+        for key in ("desktop edit mode", "edit mode", "_display_settings"):
+            cfg.set(["ActionPlugins", str(n), "RightButton;NoModifier"], key, "false")
+    if cfg.save():
+        log("desktop menu without Enter Edit Mode and Display Configuration")
+
+
+def spotlight(tree):
+    """Spotlight floats in the middle of the screen; KRunner sits on the top edge unless
+    it's free-floating."""
+    path = Path(tree) / "krunnerrc"
+    if not path.exists():
+        path.write_text("[General]\nFreeFloating=true\n")
+        log("Spotlight (KRunner) floats mid-screen")
+        return
+    cfg = KConfig(path)
+    cfg.set(["General"], "FreeFloating", "true")
+    if cfg.save():
+        log("Spotlight (KRunner) floats mid-screen")
+
+
 def main():
     if len(sys.argv) != 2:
         sys.exit(__doc__)
@@ -379,6 +410,8 @@ def main():
     no_bell()
     wallpaper_defaults()
     menu_bar(tree)
+    desktop_menu(tree)
+    spotlight(tree)
 
 
 if __name__ == "__main__":
