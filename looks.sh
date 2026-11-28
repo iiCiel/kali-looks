@@ -10,7 +10,7 @@
 #   looks rebuild win7             rebuild Windows 7 after a Plasma update
 #   looks sessions remove          take the sessions off the login screen
 #   looks auth [remove]            one password covers 30 minutes of admin prompts
-#   looks desktop-rights [remove]  Turn Off, network, USB drives without an admin password
+#   looks desktop-rights [remove]  Turn Off, network, USB drives, brightness keys with Remote Desktop on
 #   looks sandbox <look> start|stop|shot NAME|run CMD   a hidden session, for testing
 #   looks wallpaper [look]         a look's wallpaper; fills in screens showing Plasma's blue default
 #   looks dock-apps list|quit ID   running apps, windows or not (the macOS Tahoe Dock uses it)
@@ -112,6 +112,9 @@ cmd_setup() {
   local stamp; stamp=$(mktemp); touch "$stamp"
   look_setup
   touch "$LOOK_CFG/.ready"
+  # the hidden session leaves KDE's global shortcuts switched off: the next login
+  # puts KDE's defaults back (lib/shortcuts.py)
+  rm -f "$LOOK_CFG/.kali-looks-shortcut-defaults"
   if [[ $SETUP_MODE == sandbox ]]; then cmd_sandbox "$id" stop >/dev/null; trap - EXIT; fi
   [[ $SETUP_MODE == sandbox ]] && fix_sandbox_paths "$id" "$stamp"
   rm -f "$stamp"
@@ -173,7 +176,7 @@ cmd_desktop_rights() {
         echo 'chmod 644 /etc/polkit-1/rules.d/48-kali-looks-desktop.rules'
       } > "$script"
       pkexec bash "$script" || { rm -f "$script"; die "Not installed."; }
-      ok "Turn Off, network and USB drives work without an admin password (undo: looks desktop-rights remove)." ;;
+      ok "Turn Off, network, USB drives and the brightness keys work without an admin password (undo: looks desktop-rights remove)." ;;
     remove)
       echo 'rm -f /etc/polkit-1/rules.d/48-kali-looks-desktop.rules' > "$script"
       pkexec bash "$script" && ok "Removed." ;;

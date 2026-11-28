@@ -1,14 +1,21 @@
 #!/usr/bin/env python3
 """kali-looks: the keyboard shortcuts every look needs, filled in where they're missing.
 
-Each look starts its KDE settings fresh, and in them KDE came up with no screenshot
-keys at all (Spectacle never registered) and with Close Window (Alt+F4) and Kill
-Window switched off. This puts back closing, force quitting, screenshots and the task
-manager, in each look's own style. Only keys that are missing or switched off ("none")
-are written: a shortcut you set yourself is left alone. Runs before the session
-starts, while nothing holds the file. Safe to run again.
+A look's first setup runs in a hidden session, and KDE came out of it with nearly
+every global shortcut switched off ("none"): the volume, mute, media and brightness
+keys, Alt+Tab, Show Desktop, tiling, and the rest, and no screenshot keys at all
+(Spectacle never registered). Two passes, before the session starts while nothing
+holds the file:
+
+- once per look (and again after each `looks setup`, which deletes the stamp): every
+  shortcut KDE shows as switched off goes back to KDE's own default, unless another
+  action already uses that key or the look leaves it off on purpose (a Mac has no
+  Meta-tap menu, and Cmd+Q quits apps there);
+- every login: closing, force quitting, screenshots and the task manager in each
+  look's own style, only where missing or off, so a shortcut you set yourself stays.
 
   shortcuts.py <look's config folder> <look>
+Safe to run again.
 """
 import sys
 from pathlib import Path
@@ -34,6 +41,51 @@ STYLES = {
                 MONITOR: {"_launch": "Ctrl+Shift+Esc"}},
 }
 STYLE_OF = {"macos": "macos", "win7": "windows", "winxp": "windows"}
+# KDE defaults a look leaves off on purpose: (group, action)
+LEFT_OFF = {
+    "macos": {("[plasmashell]", "activate application launcher"),  # Meta alone opens nothing on a Mac
+              ("[plasmashell]", "manage activities")},  # Meta+Q: Cmd+Q is Quit on a Mac
+    "windows": set(),
+}
+STAMP = ".kali-looks-shortcut-defaults"  # in the look's config folder: defaults put back
+
+
+TAB = r"\t"  # KDE separates several keys for one action with a literal \t
+
+
+def keys_of(value):
+    """The key sequences in a stored value."""
+    return [k for k in value.split(TAB) if k and k != "none"]
+
+
+def restore_defaults(groups, style):
+    """Every action stored as none,<default>,<name> gets its default back. A key another
+    action already uses is left out (the first one keeps it). Returns the actions set."""
+    used, offs = set(), []
+    for name, body in groups:
+        for i, line in enumerate(body):
+            if "=" not in line or line.startswith("_k_friendly_name"):
+                continue
+            key, value = line.rstrip("\n").split("=", 1)
+            if name.startswith("[services]"):
+                used.update(keys_of(value))
+                continue
+            parts = value.split(",", 2)
+            if len(parts) != 3:
+                continue
+            if parts[0] == "none" and keys_of(parts[1]) and (name, key) not in LEFT_OFF[style]:
+                offs.append((name, body, i, key, parts))
+            else:
+                used.update(keys_of(parts[0]))
+    done = []
+    for name, body, i, key, (_, default, label) in offs:
+        free = [k for k in keys_of(default) if k not in used]
+        if not free:
+            continue
+        used.update(free)
+        body[i] = f"{key}={TAB.join(free)},{default},{label}\n"
+        done.append(f"{name.strip('[]')} {key}")
+    return done
 
 
 def parse(lines):
@@ -87,6 +139,12 @@ def main():
     rc = cfg / "kglobalshortcutsrc"
     groups = parse(rc.read_text().splitlines(keepends=True) if rc.exists() else [])
     changed = []
+    stamp = cfg / STAMP
+    if rc.exists() and not stamp.exists():
+        back = restore_defaults(groups, style)
+        if back:
+            print(f"shortcuts: {len(back)} KDE defaults back on (" + ", ".join(back[:6])
+                  + (", ..." if len(back) > 6 else "") + ")")
     for action, (keys, label) in KWIN.items():
         if set_missing(groups, "[kwin]", action, f"{keys},{keys},{label}",
                        lambda v: v.split(",", 1)[0] == "none"):
@@ -95,10 +153,13 @@ def main():
         for key, value in keys.items():
             if set_missing(groups, group, key, value, lambda v: v in ("", "none")):
                 changed.append(f"{group.split('][')[-1].rstrip(']')} {key}")
-    if changed:
+    if changed or (rc.exists() and not stamp.exists()):
         text = "".join((name + "\n" if name else "") + "".join(body) for name, body in groups)
         rc.write_text(text)
+    if changed:
         print("shortcuts: set " + ", ".join(changed))
+    if rc.exists():
+        stamp.touch()
 
 
 if __name__ == "__main__":
