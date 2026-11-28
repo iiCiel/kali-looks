@@ -609,6 +609,7 @@ def main():
     dock_dots()
     spotlight(tree)
     finder_names(tree)
+    subprocess.run([sys.executable, str(Path(__file__).resolve().parent / "lockscreen.py"), tree])
 
 
 if __name__ == "__main__":
