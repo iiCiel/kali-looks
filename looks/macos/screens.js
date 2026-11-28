@@ -77,5 +77,19 @@
     on[s] = true;
     added.push(bar.id);
   }
-  print("main: " + main.id + ", added: " + added.join(","));
+  // Wallpaper: a screen without one of its own gets the main screen's. (With none set,
+  // Plasma paints its default, and the menu bar there can't read the wallpaper to pick
+  // white text: it stayed black.)
+  var ds = desktops(), g = ["Wallpaper", "org.kde.image", "General"], img = "", filled = 0;
+  for (var d = 0; d < ds.length; d++)
+    if (ds[d].screen == main.screen && ds[d].wallpaperPlugin == "org.kde.image") {
+      ds[d].currentConfigGroup = g; img = String(ds[d].readConfig("Image") || "");
+    }
+  if (img != "") for (var d = 0; d < ds.length; d++) {
+    if (ds[d].wallpaperPlugin != "org.kde.image") continue;
+    ds[d].currentConfigGroup = g;
+    if (String(ds[d].readConfig("Image") || "") != "") continue;
+    ds[d].writeConfig("Image", img); ds[d].reloadConfig(); filled++;
+  }
+  print("main: " + main.id + ", wallpapers set: " + filled + ", added: " + added.join(","));
 })();
