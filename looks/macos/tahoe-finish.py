@@ -656,18 +656,17 @@ def screens_live():
         else:
             time.sleep(1)
     out = plasma_script(HERE / "screens.js")
-    if not out or out.endswith("added: "):
+    m = re.search(r"added: *(\S*)", out or "")
+    r = re.search(r"removed: *(\d+)", out or "")
+    if not m or (not m.group(1) and not (r and int(r.group(1)))):
         return
     log(out)
-    # How Plasma draws a bar (glass behind each item) is read only when Plasma starts:
-    # give the new bars the main bar's look, then start Plasma again (a second's blink,
-    # only when a screen got a new bar).
+    # How Plasma draws a bar (glass behind each item) is read when Plasma starts: give
+    # new bars the main bar's look for the next start. Plasma is never stopped or
+    # restarted from here: a restart can't start it again once Remote Desktop has taken
+    # DISPLAY out of the session's environment, and the screen stays black.
     tree = (HOME / ".config").resolve()
-    subprocess.run(["systemctl", "--user", "stop", "plasma-plasmashell.service"], check=False)
-    try:
-        menu_bar_views(KConfig(tree / "plasma-org.kde.plasma.desktop-appletsrc"), tree)
-    finally:
-        subprocess.run(["systemctl", "--user", "start", "plasma-plasmashell.service"], check=False)
+    menu_bar_views(KConfig(tree / "plasma-org.kde.plasma.desktop-appletsrc"), tree)
 
 
 WALLPAPER_STATE = HOME / ".local/share/kali-looks/tahoe-wallpaper.json"

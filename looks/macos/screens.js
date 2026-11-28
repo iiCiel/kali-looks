@@ -2,24 +2,38 @@
 // Each screen of the Tahoe session that has no menu bar gets an exact copy of the main
 // one: same items in the same order, same settings. Plasma desktop script
 // (org.kde.PlasmaShell.evaluateScript), safe to run again. Prints "not ready" while
-// Plasma is still placing its panels (run it again), and "added: <panel ids>" otherwise.
+// Plasma is still placing its panels (run it again), and "... removed: <n>, added: <panel ids>" otherwise.
 (function () {
   var MENU = "org.kde.mac.tahoe.liquid.globalmenu";
-  // (A bar on screen -1 belongs to a screen that isn't connected now: left alone.)
-  var all = panels(), bars = [];
+  var all = panels(), bars = [], away = [];
   for (var i = 0; i < all.length; i++) {
     var p = all[i];
-    if (p.location != "top" || p.screen < 0) continue;
+    if (p.location != "top") continue;
     var ws = p.widgets();
-    for (var k = 0; k < ws.length; k++) if (ws[k].type == MENU) { bars.push(p); break; }
+    for (var k = 0; k < ws.length; k++) if (ws[k].type == MENU) { (p.screen < 0 ? away : bars).push(p); break; }
   }
   if (bars.length == 0) { print("not ready"); return; }
   var main = bars[0];
   for (var i = 1; i < bars.length; i++)
     if (bars[i].screen < main.screen || (bars[i].screen == main.screen && bars[i].id < main.id)) main = bars[i];
 
-  var on = {};
-  for (var i = 0; i < bars.length; i++) on[bars[i].screen] = true;
+  // One menu bar per screen: when screens are renumbered, Plasma brings back a bar it
+  // had kept for that number next to the one a screen already has. The oldest stays.
+  // Bars kept for screens that aren't there now go too: a screen that comes back gets
+  // a fresh copy of the main bar.
+  var on = {}, removed = 0;
+  for (var i = 0; i < bars.length; i++) {
+    var p = bars[i], s = p.screen;
+    if (!(s in on)) { on[s] = p; continue; }
+    var stay = (on[s] === main || (p !== main && on[s].id < p.id)) ? on[s] : p;
+    (stay === p ? on[s] : p).remove();
+    on[s] = stay;
+    removed++;
+  }
+  // (never the first menu bar of all, the one the others are copied from)
+  var first = main;
+  for (var i = 0; i < away.length; i++) if (away[i].id < first.id) first = away[i];
+  for (var i = 0; i < away.length; i++) if (away[i] !== first) { away[i].remove(); removed++; }
 
   // every key of every group below <group>, as it is on the main bar
   function copyGroup(from, to, group, ids) {
@@ -91,5 +105,5 @@
     if (String(ds[d].readConfig("Image") || "") != "") continue;
     ds[d].writeConfig("Image", img); ds[d].reloadConfig(); filled++;
   }
-  print("main: " + main.id + ", wallpapers set: " + filled + ", added: " + added.join(","));
+  print("main: " + main.id + ", wallpapers set: " + filled + ", removed: " + removed + ", added: " + added.join(","));
 })();
