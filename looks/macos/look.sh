@@ -34,6 +34,8 @@ look_setup() {
   python3 "$LOOK_DIR/patch-menubar-ink.py" "$MAC_SRC" || warn "Couldn't patch the menu bar colors"
   # Dock icons unchanged under the pointer, names only; menus' shortcuts in Mac symbols
   python3 "$LOOK_DIR/patch-dock-hover.py" "$MAC_SRC" || warn "Couldn't patch the Dock hover"
+  # the Dock keeps floating above the edge next to maximized windows (its dots show)
+  python3 "$LOOK_DIR/patch-dock-float.py" "$MAC_SRC" || warn "Couldn't patch the Dock's float"
   # Running apps keep a Dock icon, a dot and Quit, windows or not (looks dock-apps)
   python3 "$LOOK_DIR/patch-dock-running.py" "$MAC_SRC" || warn "Couldn't patch the Dock's running apps"
   python3 "$LOOK_DIR/patch-shortcut-symbols.py" "$MAC_SRC" || warn "Couldn't patch the menu shortcuts"
