@@ -1,0 +1,435 @@
+#!/usr/bin/env python3
+"""cupertino-xfce Control Center.
+
+A macOS-style Control Center for Xfce: Wi-Fi, Bluetooth, Do Not Disturb, light/dark
+appearance, display brightness and sound, plus Screenshot / Lock / Settings shortcuts.
+Opens under the menu bar at the top-right of the monitor the pointer is on. Clicking the
+menu-bar icon again, pressing Escape or clicking elsewhere closes it.
+
+Uses only tools Xfce systems already have: nmcli, bluetoothctl, xfconf-query, wpctl or
+pactl, and xfce4-power-manager's backlight helper.
+"""
+import os
+import re
+import shutil
+import subprocess
+import sys
+
+import gi
+
+gi.require_version("Gtk", "3.0")
+gi.require_version("Gdk", "3.0")
+from gi.repository import Gdk, Gio, GLib, Gtk  # noqa: E402
+
+APP_ID = "io.github.iiCiel.CupertinoControlCenter"
+WIDTH = 330
+MODE_CMD = os.path.expanduser("~/.local/bin/cupertino-xfce-mode")
+
+
+# ---- small helpers ------------------------------------------------------------------
+def run(cmd, timeout=4):
+    """Run a command, return stdout ('' on any failure). Never raises."""
+    try:
+        return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        return ""
+
+
+def spawn(cmd):
+    try:
+        subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+    except OSError:
+        pass
+
+
+def have(tool):
+    return shutil.which(tool) is not None
+
+
+def xfconf_get(channel, prop):
+    return run(["xfconf-query", "-c", channel, "-p", prop])
+
+
+def is_dark():
+    return "dark" in xfconf_get("xsettings", "/Net/ThemeName").lower()
+
+
+# ---- system state -------------------------------------------------------------------
+class Wifi:
+    @staticmethod
+    def available():
+        return have("nmcli")
+
+    @staticmethod
+    def enabled():
+        return run(["nmcli", "radio", "wifi"]) == "enabled"
+
+    @staticmethod
+    def ssid():
+        for line in run(["nmcli", "-t", "-f", "ACTIVE,SSID", "dev", "wifi"]).splitlines():
+            if line.startswith("yes:"):
+                return line.split(":", 1)[1] or "Connected"
+        return ""
+
+    @staticmethod
+    def set(on):
+        spawn(["nmcli", "radio", "wifi", "on" if on else "off"])
+
+
+class Bluetooth:
+    @staticmethod
+    def available():
+        return have("bluetoothctl") and "Controller" in run(["bluetoothctl", "list"])
+
+    @staticmethod
+    def enabled():
+        return "Powered: yes" in run(["bluetoothctl", "show"])
+
+    @staticmethod
+    def set(on):
+        if on and have("rfkill"):
+            run(["rfkill", "unblock", "bluetooth"])
+        spawn(["bluetoothctl", "power", "on" if on else "off"])
+
+
+class DoNotDisturb:
+    @staticmethod
+    def enabled():
+        return xfconf_get("xfce4-notifyd", "/do-not-disturb") == "true"
+
+    @staticmethod
+    def set(on):
+        run(["xfconf-query", "-c", "xfce4-notifyd", "-p", "/do-not-disturb", "-n", "-t", "bool", "-s", "true" if on else "false"])
+
+
+class Backlight:
+    HELPER = "/usr/sbin/xfpm-power-backlight-helper"
+
+    def __init__(self):
+        self.dev = None
+        base = "/sys/class/backlight"
+        if os.path.isdir(base):
+            devs = sorted(os.listdir(base))
+            self.dev = os.path.join(base, devs[0]) if devs else None
+
+    def available(self):
+        return self.dev is not None and os.path.exists(self.HELPER) and have("pkexec")
+
+    def _read(self, name):
+        try:
+            with open(os.path.join(self.dev, name)) as fh:
+                return int(fh.read().strip())
+        except (OSError, ValueError):
+            return 0
+
+    def get(self):
+        mx = self._read("max_brightness") or 1
+        return self._read("brightness") / mx
+
+    def set(self, frac):
+        mx = self._read("max_brightness") or 1
+        value = max(1, int(round(frac * mx)))
+        # xfce4-power-manager's polkit rule lets the active user run this without a password.
+        spawn(["pkexec", self.HELPER, "--set-brightness", str(value)])
+
+
+class Sound:
+    def __init__(self):
+        self.tool = "wpctl" if have("wpctl") else ("pactl" if have("pactl") else None)
+
+    def available(self):
+        return self.tool is not None
+
+    def get(self):
+        if self.tool == "wpctl":
+            m = re.search(r"Volume:\s*([\d.]+)", run(["wpctl", "get-volume", "@DEFAULT_AUDIO_SINK@"]))
+            return min(1.0, float(m.group(1))) if m else 0.5
+        m = re.search(r"(\d+)%", run(["pactl", "get-sink-volume", "@DEFAULT_SINK@"]))
+        return int(m.group(1)) / 100 if m else 0.5
+
+    def set(self, frac):
+        frac = max(0.0, min(1.0, frac))
+        if self.tool == "wpctl":
+            spawn(["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", f"{frac:.2f}"])
+            spawn(["wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "0"])
+        elif self.tool == "pactl":
+            spawn(["pactl", "set-sink-volume", "@DEFAULT_SINK@", f"{int(frac * 100)}%"])
+
+
+# ---- styling ------------------------------------------------------------------------
+def css(dark):
+    if dark:
+        bg, tile, fg, sub, border, off = ("rgba(40,40,46,0.80)", "rgba(255,255,255,0.09)", "#f5f5f7",
+                                         "rgba(245,245,247,0.62)", "rgba(255,255,255,0.12)", "rgba(255,255,255,0.16)")
+    else:
+        bg, tile, fg, sub, border, off = ("rgba(246,246,248,0.78)", "rgba(255,255,255,0.62)", "#1d1d1f",
+                                         "rgba(29,29,31,0.58)", "rgba(0,0,0,0.08)", "rgba(0,0,0,0.09)")
+    return f"""
+    window.cc {{ background-color: transparent; }}
+    .cc-root {{
+        background-color: {bg}; border-radius: 18px; border: 1px solid {border};
+        padding: 12px; color: {fg}; font-family: Inter, sans-serif;
+    }}
+    .cc-tile {{
+        background-color: {tile}; border-radius: 14px; padding: 10px;
+        border: 1px solid {border};
+    }}
+    .cc-title {{ font-weight: 600; font-size: 10pt; color: {fg}; }}
+    .cc-sub {{ font-size: 8.5pt; color: {sub}; }}
+    .cc-heading {{ font-weight: 600; font-size: 9.5pt; color: {fg}; margin-bottom: 2px; }}
+    button.cc-toggle {{
+        min-width: 30px; min-height: 30px; padding: 0; border-radius: 999px;
+        background-image: none; background-color: {off}; border: none; box-shadow: none; color: {fg};
+    }}
+    button.cc-toggle.on {{ background-color: #0a84ff; color: #ffffff; }}
+    button.cc-toggle image {{ color: inherit; }}
+    button.cc-small {{
+        background-image: none; background-color: {tile}; border-radius: 14px; border: 1px solid {border};
+        box-shadow: none; padding: 10px 6px; color: {fg};
+    }}
+    button.cc-small:hover, button.cc-toggle:hover {{ opacity: 0.88; }}
+    scale trough {{ min-height: 22px; border-radius: 11px; background-color: {off}; border: none; }}
+    scale highlight {{ border-radius: 11px; background-color: {"#f5f5f7" if dark else "#ffffff"};
+                       border: 1px solid {border}; }}
+    scale slider {{ min-width: 22px; min-height: 22px; border-radius: 11px; margin: 0;
+                    background-color: #ffffff; border: 1px solid rgba(0,0,0,0.15); box-shadow: 0 1px 3px rgba(0,0,0,0.25); }}
+    """
+
+
+def icon(name, size=16):
+    img = Gtk.Image.new_from_icon_name(name, Gtk.IconSize.BUTTON)
+    img.set_pixel_size(size)
+    return img
+
+
+# ---- the window ---------------------------------------------------------------------
+class ControlCenter(Gtk.ApplicationWindow):
+    def __init__(self, app):
+        super().__init__(application=app, title="Control Center")
+        self.get_style_context().add_class("cc")
+        self.set_decorated(False)
+        self.set_resizable(False)
+        self.set_skip_taskbar_hint(True)
+        self.set_skip_pager_hint(True)
+        self.set_keep_above(True)
+        self.set_type_hint(Gdk.WindowTypeHint.UTILITY)
+        screen = self.get_screen()
+        visual = screen.get_rgba_visual()
+        if visual is not None and screen.is_composited():
+            self.set_visual(visual)
+            self.set_app_paintable(True)
+
+        provider = Gtk.CssProvider()
+        provider.load_from_data(css(is_dark()).encode())
+        Gtk.StyleContext.add_provider_for_screen(screen, provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION + 1)
+
+        self.toggles = {}
+        root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        root.get_style_context().add_class("cc-root")
+        root.set_size_request(WIDTH, -1)
+        self.add(root)
+
+        # Row 1: connectivity tile (left) + DND / Appearance (right)
+        row = Gtk.Box(spacing=10, homogeneous=True)
+        conn = self._tile(vertical=True, spacing=10)
+        if Wifi.available():
+            conn.pack_start(self._toggle_row("wifi", "network-wireless-symbolic", "Wi-Fi",
+                                             Wifi.enabled, Wifi.set, Wifi.ssid,
+                                             settings=["nm-connection-editor"]), False, False, 0)
+        if Bluetooth.available():
+            conn.pack_start(self._toggle_row("bt", "bluetooth-active-symbolic", "Bluetooth",
+                                             Bluetooth.enabled, Bluetooth.set,
+                                             lambda: "On" if Bluetooth.enabled() else "Off",
+                                             settings=["blueman-manager"]), False, False, 0)
+        right = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10, homogeneous=True)
+        dnd = self._tile(vertical=False, spacing=0)
+        dnd.pack_start(self._toggle_row("dnd", "weather-clear-night-symbolic", "Focus",
+                                        DoNotDisturb.enabled, DoNotDisturb.set,
+                                        lambda: "Do Not Disturb" if DoNotDisturb.enabled() else "Off"), True, True, 0)
+        right.pack_start(dnd, True, True, 0)
+        if os.path.exists(MODE_CMD):
+            appearance = self._tile(vertical=False, spacing=0)
+            appearance.pack_start(self._toggle_row("dark", "weather-clear-night-symbolic", "Dark Mode",
+                                                   is_dark, self._set_dark,
+                                                   lambda: "On" if is_dark() else "Off"), True, True, 0)
+            right.pack_start(appearance, True, True, 0)
+        if conn.get_children():
+            row.pack_start(conn, True, True, 0)
+            row.pack_start(right, True, True, 0)
+        else:
+            # No Wi-Fi or Bluetooth hardware: lay the remaining tiles side by side.
+            right.set_orientation(Gtk.Orientation.HORIZONTAL)
+            row.pack_start(right, True, True, 0)
+        root.pack_start(row, False, False, 0)
+
+        # Sliders
+        self.backlight = Backlight()
+        if self.backlight.available():
+            root.pack_start(self._slider_tile("Display", "display-brightness-symbolic",
+                                              self.backlight.get(), self.backlight.set), False, False, 0)
+        self.sound = Sound()
+        if self.sound.available():
+            root.pack_start(self._slider_tile("Sound", "audio-volume-high-symbolic",
+                                              self.sound.get(), self.sound.set), False, False, 0)
+
+        # Shortcut buttons
+        shortcuts = Gtk.Box(spacing=10, homogeneous=True)
+        shortcuts.pack_start(self._small("camera-photo-symbolic", "Screenshot", ["xfce4-screenshooter"]), True, True, 0)
+        shortcuts.pack_start(self._small("system-lock-screen-symbolic", "Lock", ["xflock4"]), True, True, 0)
+        shortcuts.pack_start(self._small("preferences-system-symbolic", "Settings", ["xfce4-settings-manager"]), True, True, 0)
+        root.pack_start(shortcuts, False, False, 0)
+
+        self.connect("key-press-event", self._on_key)
+        self.connect("focus-out-event", self._on_focus_out)
+        self._armed = False
+        GLib.timeout_add(400, self._arm)
+        GLib.timeout_add_seconds(3, self._refresh)
+
+    # --- builders
+    def _tile(self, vertical, spacing):
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL if vertical else Gtk.Orientation.HORIZONTAL,
+                      spacing=spacing)
+        box.get_style_context().add_class("cc-tile")
+        return box
+
+    def _toggle_row(self, key, icon_name, title, getter, setter, subtitle, settings=None):
+        row = Gtk.Box(spacing=10)
+        btn = Gtk.Button()
+        btn.add(icon(icon_name))
+        btn.get_style_context().add_class("cc-toggle")
+        btn.set_valign(Gtk.Align.CENTER)
+        labels = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        t = Gtk.Label(label=title, xalign=0)
+        t.get_style_context().add_class("cc-title")
+        s = Gtk.Label(label="", xalign=0)
+        s.get_style_context().add_class("cc-sub")
+        s.set_ellipsize(3)  # Pango.EllipsizeMode.END
+        s.set_max_width_chars(14)
+        labels.pack_start(t, False, False, 0)
+        labels.pack_start(s, False, False, 0)
+        row.pack_start(btn, False, False, 0)
+        if settings and have(settings[0]):
+            ev = Gtk.EventBox()
+            ev.add(labels)
+            ev.connect("button-release-event", lambda *_: (spawn(settings), self.close_cc()))
+            row.pack_start(ev, True, True, 0)
+        else:
+            row.pack_start(labels, True, True, 0)
+
+        def sync():
+            on = bool(getter())
+            ctx = btn.get_style_context()
+            (ctx.add_class if on else ctx.remove_class)("on")
+            s.set_text(subtitle() or ("On" if on else "Off"))
+            return on
+
+        def clicked(_b):
+            on = not btn.get_style_context().has_class("on")
+            setter(on)
+            ctx = btn.get_style_context()
+            (ctx.add_class if on else ctx.remove_class)("on")
+            GLib.timeout_add(1200, lambda: (sync(), False)[1])
+
+        btn.connect("clicked", clicked)
+        self.toggles[key] = sync
+        sync()
+        return row
+
+    def _slider_tile(self, title, icon_name, value, setter):
+        tile = self._tile(vertical=True, spacing=6)
+        h = Gtk.Label(label=title, xalign=0)
+        h.get_style_context().add_class("cc-heading")
+        tile.pack_start(h, False, False, 0)
+        row = Gtk.Box(spacing=8)
+        row.pack_start(icon(icon_name), False, False, 0)
+        scale = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0, 1, 0.01)
+        scale.set_draw_value(False)
+        scale.set_value(value)
+        pending = {"id": 0}
+
+        def changed(sc):
+            if pending["id"]:
+                GLib.source_remove(pending["id"])
+            pending["id"] = GLib.timeout_add(120, lambda: (setter(sc.get_value()), pending.update(id=0), False)[2])
+
+        scale.connect("value-changed", changed)
+        row.pack_start(scale, True, True, 0)
+        tile.pack_start(row, False, False, 0)
+        return tile
+
+    def _small(self, icon_name, label, cmd):
+        btn = Gtk.Button()
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        box.pack_start(icon(icon_name, 18), False, False, 0)
+        lab = Gtk.Label(label=label)
+        lab.get_style_context().add_class("cc-sub")
+        box.pack_start(lab, False, False, 0)
+        btn.add(box)
+        btn.get_style_context().add_class("cc-small")
+
+        def go(_b):
+            self.close_cc()
+            # Let the panel finish closing before a screenshot or lock grabs the screen.
+            GLib.timeout_add(250, lambda: (spawn(cmd), False)[1])
+
+        btn.connect("clicked", go)
+        return btn
+
+    # --- behaviour
+    def _set_dark(self, on):
+        spawn([MODE_CMD, "dark" if on else "light"])
+        self.close_cc()
+
+    def _arm(self):
+        self._armed = True
+        return False
+
+    def _refresh(self):
+        for sync in self.toggles.values():
+            sync()
+        return True
+
+    def _on_key(self, _w, ev):
+        if ev.keyval == Gdk.KEY_Escape:
+            self.close_cc()
+        return False
+
+    def _on_focus_out(self, *_):
+        if self._armed:
+            self.close_cc()
+        return False
+
+    def close_cc(self):
+        self.get_application().quit()
+
+    def place(self):
+        display = Gdk.Display.get_default()
+        seat = display.get_default_seat()
+        _screen, px, py = seat.get_pointer().get_position()
+        mon = display.get_monitor_at_point(px, py)
+        geo = mon.get_workarea() if mon else Gdk.Rectangle()
+        self.show_all()
+        w, _h = self.get_size()
+        x = geo.x + geo.width - w - 8
+        y = geo.y + 6
+        self.move(x, y)
+
+
+class App(Gtk.Application):
+    def __init__(self):
+        super().__init__(application_id=APP_ID, flags=Gio.ApplicationFlags.FLAGS_NONE)
+        self.win = None
+
+    def do_activate(self):
+        if self.win is not None:
+            # Second click on the menu-bar icon: close, like macOS.
+            self.quit()
+            return
+        self.win = ControlCenter(self)
+        self.win.place()
+        self.win.present()
+
+
+if __name__ == "__main__":
+    GLib.set_prgname("cupertino-control-center")
+    sys.exit(App().run(sys.argv[:1]))

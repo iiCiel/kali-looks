@@ -1,0 +1,46 @@
+/configver 2
+/panels [<1>, <2>]
+/panels/panel-1/background-rgba {{BAR_RGBA}}
+/panels/panel-1/background-style uint32 1
+/panels/panel-1/length uint32 100
+/panels/panel-1/plugin-ids [<1>, <2>, <3>, <4>, <5>, <7>, <12>, <11>, <8>]
+/panels/panel-1/position 'p=6;x=0;y=0'
+/panels/panel-1/position-locked true
+/panels/panel-1/size uint32 28
+/panels/panel-2/autohide-behavior uint32 1
+/panels/panel-2/background-rgba [<0.0>, <0.0>, <0.0>, <0.0>]
+/panels/panel-2/background-style uint32 1
+/panels/panel-2/icon-size uint32 44
+/panels/panel-2/length 1.0
+/panels/panel-2/length-adjust true
+/panels/panel-2/plugin-ids [<10>]
+/panels/panel-2/position 'p=10;x=0;y=0'
+/panels/panel-2/position-locked true
+/panels/panel-2/size uint32 54
+/plugins/plugin-1 'whiskermenu'
+/plugins/plugin-2 'appmenu'
+/plugins/plugin-2/bold-application-name true
+/plugins/plugin-2/compact-mode false
+/plugins/plugin-2/plugins/plugin-2/expand true
+/plugins/plugin-3 'separator'
+/plugins/plugin-3/expand true
+/plugins/plugin-3/style uint32 0
+/plugins/plugin-4 'systray'
+/plugins/plugin-4/size-max uint32 22
+/plugins/plugin-4/square-icons true
+/plugins/plugin-4/symbolic-icons true
+/plugins/plugin-5 'pulseaudio'
+/plugins/plugin-5/enable-keyboard-shortcuts true
+/plugins/plugin-7 'power-manager-plugin'
+/plugins/plugin-8 'clock'
+/plugins/plugin-8/digital-layout uint32 3
+/plugins/plugin-8/digital-time-font 'Inter Semi-Bold 10'
+/plugins/plugin-8/digital-time-format '%a %b %-d  %-I:%M %p'
+/plugins/plugin-8/mode uint32 2
+/plugins/plugin-10 'docklike'
+/plugins/plugin-11 'launcher'
+/plugins/plugin-11/items [<'cupertino-control-center.desktop'>]
+/plugins/plugin-11/show-label false
+/plugins/plugin-12 'launcher'
+/plugins/plugin-12/items [<'cupertino-spotlight.desktop'>]
+/plugins/plugin-12/show-label false

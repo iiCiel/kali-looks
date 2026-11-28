@@ -1,0 +1,24 @@
+/* lock screen (xfce4-screensaver): frosted, rounded box like the login screen */
+#lock-panel { background-color: transparent; }
+#login_window {
+  background-color: rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 20px;
+  box-shadow: none;
+}
+#auth-prompt-entry {
+  border-radius: 10px;
+  background-color: rgba(0, 0, 0, 0.28);
+  color: #ffffff;
+  caret-color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.30);
+  box-shadow: none;
+}
+#auth-unlock-button, #auth-cancel-button, #auth-switch-button, #auth-logout-button {
+  border-radius: 10px;
+  box-shadow: none;
+}
+#auth-realname-label, #auth-date-time-label, #auth-hostname-label, #auth-prompt-label,
+#auth-status-label, #auth-capslock-label {
+  color: #ffffff;
+}

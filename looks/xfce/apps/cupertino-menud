@@ -1,0 +1,573 @@
+#!/usr/bin/env python3
+"""cupertino-menud: the cupertino-xfce background helper.
+
+1. Gives every window a Mac-style menu bar (below).
+2. When a monitor is plugged in or out, puts the wallpaper and a menu bar on every
+   screen (runs `cupertino-xfce-mode monitors`).
+3. A wallpaper picked in Desktop Settings goes on every screen and workspace (Xfce
+   only changes the screen the settings window is on).
+
+Apps that export their own menus (GTK menubars, Qt, Electron, ...) keep them.
+Windows that export nothing, or an empty menu (Firefox, terminals without a
+menubar, the desktop itself), get a standard File / Edit / View / Window / Help
+set through the AppMenu registrar. Each item sends the app's usual keyboard
+shortcut, or runs a small command, so it works with any app.
+"""
+import os
+import shutil
+import subprocess
+import sys
+import time
+
+import warnings
+
+import gi
+
+gi.require_version("Gdk", "3.0")
+gi.require_version("Gtk", "3.0")
+gi.require_version("Wnck", "3.0")
+from gi.repository import Gdk, Gio, GLib, Gtk, Wnck  # noqa: E402
+
+BUS_NAME = "io.github.iiCiel.CupertinoMenu"
+BASE_PATH = "/io/github/iiCiel/CupertinoMenu"
+CONF_DIR = os.path.join(os.environ.get("XDG_CONFIG_HOME", os.path.expanduser("~/.config")), "cupertino-xfce")
+REPO_URL = "https://github.com/iiCiel/cupertino-xfce"
+
+BROWSERS = ("firefox", "librewolf", "waterfox", "floorp", "zen", "chromium", "chrome", "brave", "vivaldi")
+TERMINALS = ("kitty", "alacritty", "foot", "wezterm", "ghostty", "st-256color", "urxvt", "xterm", "terminator", "tilix")
+
+
+# ---- actions ------------------------------------------------------------------------
+def run(*argv):
+    try:
+        subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                         stderr=subprocess.DEVNULL, start_new_session=True)
+    except OSError as e:
+        print(f"cupertino-menud: {argv[0]}: {e}", file=sys.stderr)
+
+
+def user_dir(name, fallback):
+    try:
+        out = subprocess.run(["xdg-user-dir", name], capture_output=True, text=True, timeout=2).stdout.strip()
+        if out:
+            return out
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return os.path.expanduser(fallback)
+
+
+def key(combo):
+    def act(xid):
+        cmd = ["xdotool"]
+        if xid:
+            cmd += ["windowactivate", "--sync", str(xid)]
+        run(*cmd, "key", "--clearmodifiers", combo)
+    return act
+
+
+def cmd(*argv):
+    return lambda xid: run(*argv)
+
+
+def close_window(xid):
+    if xid:
+        run("wmctrl", "-ic", hex(xid))
+
+
+def minimize(xid):
+    if xid:
+        run("xdotool", "windowminimize", str(xid))
+
+
+def zoom(xid):
+    if xid:
+        run("wmctrl", "-ir", hex(xid), "-b", "toggle,maximized_vert,maximized_horz")
+
+
+def mission_control(_xid):
+    theme = os.path.join(CONF_DIR, "rofi", "missioncontrol.rasi")
+    run("rofi", "-show", "window", *(["-theme", theme] if os.path.exists(theme) else []))
+
+
+def open_dir(path):
+    return lambda _xid: run("thunar", path)
+
+
+def go_dir(name, fallback):
+    return lambda _xid: run("thunar", user_dir(name, fallback))
+
+
+def new_folder(_xid):
+    desk = user_dir("DESKTOP", "~/Desktop")
+    name, n = "untitled folder", 2
+    while os.path.exists(os.path.join(desk, name)):
+        name, n = f"untitled folder {n}", n + 1
+    try:
+        os.makedirs(os.path.join(desk, name))
+    except OSError as e:
+        print(f"cupertino-menud: {e}", file=sys.stderr)
+
+
+def toggle_appearance(_xid):
+    run(shutil.which("cupertino-xfce-mode") or os.path.expanduser("~/.local/bin/cupertino-xfce-mode"), "toggle")
+
+
+# ---- menus --------------------------------------------------------------------------
+# An item is (label, action, shortcut) where shortcut looks like "Ctrl+Shift+N".
+SEP = None
+
+
+def M(label, *items):
+    return (label, list(items))
+
+
+def window_menu(extra=()):
+    return M("Window",
+             ("Minimize", minimize, "Ctrl+M"),
+             ("Zoom", zoom, ""),
+             *extra,
+             SEP,
+             ("Mission Control", mission_control, "Ctrl+Up"))
+
+
+EDIT = M("Edit",
+         ("Undo", key("ctrl+z"), "Ctrl+Z"),
+         ("Redo", key("ctrl+shift+z"), "Ctrl+Shift+Z"),
+         SEP,
+         ("Cut", key("ctrl+x"), "Ctrl+X"),
+         ("Copy", key("ctrl+c"), "Ctrl+C"),
+         ("Paste", key("ctrl+v"), "Ctrl+V"),
+         ("Select All", key("ctrl+a"), "Ctrl+A"),
+         SEP,
+         ("Find…", key("ctrl+f"), "Ctrl+F"))
+
+ZOOM_ITEMS = (("Zoom In", key("ctrl+plus"), "Ctrl++"),
+              ("Zoom Out", key("ctrl+minus"), "Ctrl+-"),
+              ("Actual Size", key("ctrl+0"), "Ctrl+0"))
+
+PROFILES = {
+    "generic": [
+        M("File",
+          ("New Window", key("ctrl+n"), "Ctrl+N"),
+          ("Open…", key("ctrl+o"), "Ctrl+O"),
+          SEP,
+          ("Save", key("ctrl+s"), "Ctrl+S"),
+          ("Print…", key("ctrl+p"), "Ctrl+P"),
+          SEP,
+          ("Close Window", close_window, "")),
+        EDIT,
+        M("View", *ZOOM_ITEMS, SEP, ("Enter Full Screen", key("F11"), "F11")),
+        window_menu(),
+        M("Help", ("Help", key("F1"), "F1")),
+    ],
+    "browser": [
+        M("File",
+          ("New Tab", key("ctrl+t"), "Ctrl+T"),
+          ("New Window", key("ctrl+n"), "Ctrl+N"),
+          ("New Private Window", key("ctrl+shift+p"), "Ctrl+Shift+P"),
+          ("Open Location…", key("ctrl+l"), "Ctrl+L"),
+          SEP,
+          ("Close Tab", key("ctrl+w"), "Ctrl+W"),
+          ("Close Window", key("ctrl+shift+w"), "Ctrl+Shift+W"),
+          SEP,
+          ("Save Page As…", key("ctrl+s"), "Ctrl+S"),
+          ("Print…", key("ctrl+p"), "Ctrl+P")),
+        EDIT,
+        M("View",
+          ("Reload Page", key("ctrl+r"), "Ctrl+R"),
+          SEP, *ZOOM_ITEMS, SEP,
+          ("Enter Full Screen", key("F11"), "F11")),
+        M("History",
+          ("Back", key("alt+Left"), "Alt+Left"),
+          ("Forward", key("alt+Right"), "Alt+Right"),
+          ("Home", key("alt+Home"), "Alt+Home"),
+          SEP,
+          ("Reopen Closed Tab", key("ctrl+shift+t"), "Ctrl+Shift+T"),
+          ("Show All History", key("ctrl+h"), "Ctrl+H")),
+        M("Bookmarks",
+          ("Bookmark This Page…", key("ctrl+d"), "Ctrl+D"),
+          ("Show All Bookmarks", key("ctrl+shift+o"), "Ctrl+Shift+O")),
+        window_menu((SEP,
+                     ("Show Next Tab", key("ctrl+Page_Down"), "Ctrl+Page Down"),
+                     ("Show Previous Tab", key("ctrl+Page_Up"), "Ctrl+Page Up"))),
+        M("Help", ("Help", key("F1"), "F1")),
+    ],
+    "terminal": [
+        M("Shell",
+          ("New Window", key("ctrl+shift+n"), "Ctrl+Shift+N"),
+          ("New Tab", key("ctrl+shift+t"), "Ctrl+Shift+T"),
+          SEP,
+          ("Close Window", close_window, "")),
+        M("Edit",
+          ("Copy", key("ctrl+shift+c"), "Ctrl+Shift+C"),
+          ("Paste", key("ctrl+shift+v"), "Ctrl+Shift+V"),
+          SEP,
+          ("Find…", key("ctrl+shift+f"), "Ctrl+Shift+F")),
+        M("View", *ZOOM_ITEMS, SEP, ("Enter Full Screen", key("F11"), "F11")),
+        window_menu(),
+        M("Help", ("Help", key("F1"), "F1")),
+    ],
+    "desktop": [
+        M("File",
+          ("New Finder Window", go_dir("HOME", "~"), ""),
+          ("New Folder", new_folder, ""),
+          SEP,
+          ("Open Terminal", cmd("exo-open", "--launch", "TerminalEmulator"), "")),
+        M("Edit",
+          ("Undo", key("ctrl+z"), "Ctrl+Z"),
+          SEP,
+          ("Cut", key("ctrl+x"), "Ctrl+X"),
+          ("Copy", key("ctrl+c"), "Ctrl+C"),
+          ("Paste", key("ctrl+v"), "Ctrl+V"),
+          ("Select All", key("ctrl+a"), "Ctrl+A")),
+        M("View",
+          ("Clean Up", cmd("xfdesktop", "--arrange"), ""),
+          SEP,
+          ("Change Wallpaper…", cmd("xfdesktop-settings"), ""),
+          ("Switch Light / Dark Appearance", toggle_appearance, "")),
+        M("Go",
+          ("Recents", open_dir("recent:///"), ""),
+          ("Documents", go_dir("DOCUMENTS", "~/Documents"), ""),
+          ("Desktop", go_dir("DESKTOP", "~/Desktop"), ""),
+          ("Downloads", go_dir("DOWNLOAD", "~/Downloads"), ""),
+          ("Home", go_dir("HOME", "~"), ""),
+          SEP,
+          ("Trash", open_dir("trash:///"), ""),
+          ("Network", open_dir("network:///"), "")),
+        M("Window",
+          ("Show Desktop", cmd("wmctrl", "-k", "on"), ""),
+          SEP,
+          ("Mission Control", mission_control, "Ctrl+Up")),
+        M("Help", ("cupertino-xfce Help", cmd("xdg-open", REPO_URL), "")),
+    ],
+}
+
+
+def shortcut_value(text):
+    if not text:
+        return None
+    parts = text.replace("++", "+plus").split("+")
+    names = {"Ctrl": "Control", "Page Down": "Page_Down", "Page Up": "Page_Up", "-": "minus"}
+    return [[names.get(p, p) for p in parts]]
+
+
+# ---- com.canonical.dbusmenu ----------------------------------------------------------
+DBUSMENU_XML = """
+<node><interface name="com.canonical.dbusmenu">
+  <property name="Version" type="u" access="read"/>
+  <property name="TextDirection" type="s" access="read"/>
+  <property name="Status" type="s" access="read"/>
+  <property name="IconThemePath" type="as" access="read"/>
+  <method name="GetLayout"><arg type="i" direction="in"/><arg type="i" direction="in"/><arg type="as" direction="in"/>
+    <arg type="u" direction="out"/><arg type="(ia{sv}av)" direction="out"/></method>
+  <method name="GetGroupProperties"><arg type="ai" direction="in"/><arg type="as" direction="in"/>
+    <arg type="a(ia{sv})" direction="out"/></method>
+  <method name="GetProperty"><arg type="i" direction="in"/><arg type="s" direction="in"/><arg type="v" direction="out"/></method>
+  <method name="Event"><arg type="i" direction="in"/><arg type="s" direction="in"/><arg type="v" direction="in"/><arg type="u" direction="in"/></method>
+  <method name="EventGroup"><arg type="a(isvu)" direction="in"/><arg type="ai" direction="out"/></method>
+  <method name="AboutToShow"><arg type="i" direction="in"/><arg type="b" direction="out"/></method>
+  <method name="AboutToShowGroup"><arg type="ai" direction="in"/><arg type="ai" direction="out"/><arg type="ai" direction="out"/></method>
+  <signal name="ItemsPropertiesUpdated"><arg type="a(ia{sv})"/><arg type="a(ias)"/></signal>
+  <signal name="LayoutUpdated"><arg type="u"/><arg type="i"/></signal>
+  <signal name="ItemActivationRequested"><arg type="i"/><arg type="u"/></signal>
+</interface></node>
+"""
+
+
+class DBusMenu:
+    """One exported menu tree; many windows can point at it."""
+
+    def __init__(self, conn, path, menus, target):
+        self.target = target          # callable returning the xid the user is acting on
+        self.items = {0: {"props": {"children-display": GLib.Variant("s", "submenu")}, "children": []}}
+        self.actions = {}
+        next_id = 1
+        for label, entries in menus:
+            mid = next_id
+            next_id += 1
+            self.items[mid] = {"props": {"label": GLib.Variant("s", label),
+                                         "children-display": GLib.Variant("s", "submenu")}, "children": []}
+            self.items[0]["children"].append(mid)
+            for entry in entries:
+                iid = next_id
+                next_id += 1
+                if entry is SEP:
+                    props = {"type": GLib.Variant("s", "separator")}
+                else:
+                    text, action, accel = entry
+                    props = {"label": GLib.Variant("s", text)}
+                    sc = shortcut_value(accel)
+                    if sc:
+                        props["shortcut"] = GLib.Variant("aas", sc)
+                    self.actions[iid] = action
+                self.items[iid] = {"props": props, "children": []}
+                self.items[mid]["children"].append(iid)
+        info = Gio.DBusNodeInfo.new_for_xml(DBUSMENU_XML).interfaces[0]
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            conn.register_object(path, info, self.on_call, self.on_get_property, None)
+
+    def props_of(self, iid, names):
+        props = self.items[iid]["props"]
+        return {k: v for k, v in props.items() if not names or k in names}
+
+    def layout(self, iid, depth, names):
+        kids = []
+        if depth != 0:
+            for c in self.items[iid]["children"]:
+                kids.append(GLib.Variant("(ia{sv}av)", self.layout(c, depth - 1, names)))
+        return (iid, self.props_of(iid, names), kids)
+
+    def on_get_property(self, _conn, _sender, _path, _iface, name):
+        return {"Version": GLib.Variant("u", 3), "TextDirection": GLib.Variant("s", "ltr"),
+                "Status": GLib.Variant("s", "normal"), "IconThemePath": GLib.Variant("as", [])}.get(name)
+
+    def activate(self, iid):
+        action = self.actions.get(iid)
+        if action:
+            xid = self.target()
+            # let the menu close and focus return to the app before acting
+            GLib.timeout_add(120, lambda: (action(xid), False)[1])
+
+    def on_call(self, _conn, _sender, _path, _iface, method, params, inv):
+        a = params.unpack()
+        if method == "GetLayout":
+            parent, depth, names = a
+            if parent not in self.items:
+                return inv.return_dbus_error("com.canonical.dbusmenu.Error", "no such item")
+            inv.return_value(GLib.Variant("(u(ia{sv}av))", (1, self.layout(parent, depth, set(names)))))
+        elif method == "GetGroupProperties":
+            ids, names = a
+            ids = ids or list(self.items)
+            out = [(i, self.props_of(i, set(names))) for i in ids if i in self.items]
+            inv.return_value(GLib.Variant("(a(ia{sv}))", (out,)))
+        elif method == "GetProperty":
+            iid, name = a
+            v = self.items.get(iid, {}).get("props", {}).get(name)
+            if v is None:
+                return inv.return_dbus_error("com.canonical.dbusmenu.Error", "no such property")
+            inv.return_value(GLib.Variant("(v)", (v,)))
+        elif method == "Event":
+            iid, event = a[0], a[1]
+            if event == "clicked":
+                self.activate(iid)
+            inv.return_value(None)
+        elif method == "EventGroup":
+            for iid, event, _data, _ts in a[0]:
+                if event == "clicked":
+                    self.activate(iid)
+            inv.return_value(GLib.Variant("(ai)", ([],)))
+        elif method == "AboutToShow":
+            inv.return_value(GLib.Variant("(b)", (False,)))
+        elif method == "AboutToShowGroup":
+            inv.return_value(GLib.Variant("(aiai)", ([], [])))
+        else:
+            inv.return_dbus_error("org.freedesktop.DBus.Error.UnknownMethod", method)
+
+
+# ---- deciding which windows need a menu ------------------------------------------------
+def xprops(xid, *names):
+    try:
+        out = subprocess.run(["xprop", "-id", str(xid), *names], capture_output=True, text=True, timeout=2).stdout
+    except (OSError, subprocess.SubprocessError):
+        return {}
+    res = {}
+    for line in out.splitlines():
+        if "=" in line and '"' in line:
+            res[line.split("(")[0]] = line.split('"')[1]
+    return res
+
+
+class Daemon:
+    def __init__(self):
+        self.conn = Gio.bus_get_sync(Gio.BusType.SESSION)
+        r = self.conn.call_sync("org.freedesktop.DBus", "/org/freedesktop/DBus", "org.freedesktop.DBus",
+                                "RequestName", GLib.Variant("(su)", (BUS_NAME, 4)), GLib.VariantType("(u)"),
+                                Gio.DBusCallFlags.NONE, -1, None).unpack()[0]
+        if r not in (1, 4):  # 1 = primary owner, 4 = already owner
+            print("cupertino-menud is already running", file=sys.stderr)
+            sys.exit(0)
+        self.me = self.conn.get_unique_name()
+        self.last_xid = 0
+        self.ours = set()
+        self.opened = {}
+        self.menus = {name: DBusMenu(self.conn, f"{BASE_PATH}/{name}", menus, lambda: self.last_xid)
+                      for name, menus in PROFILES.items()}
+        self.screen = Wnck.Screen.get_default()
+        self.screen.force_update()
+        self.screen.connect("active-window-changed", self.on_active)
+        self.screen.connect("window-opened", self.on_opened)
+        # Monitors: re-sync wallpaper and menu bars after a change (debounced), and once
+        # shortly after login in case monitors changed while logged out.
+        self.mon_timer = 0
+        Gdk.Screen.get_default().connect("monitors-changed", self.on_monitors)
+        self.mon_timer = GLib.timeout_add_seconds(5, self.sync_monitors)
+        # Unplugging a screen doesn't always reach X (the screen stays "on", so GTK sees
+        # no change): watch the cables themselves too. Reading these files is cheap.
+        self.cables = self.read_cables()
+        GLib.timeout_add_seconds(2, self.check_cables)
+        # Wallpaper picked in Desktop Settings -> every screen and workspace
+        self.wall_pending = None
+        self.conn.signal_subscribe("org.xfce.Xfconf", "org.xfce.Xfconf", "PropertyChanged",
+                                   "/org/xfce/Xfconf", None, Gio.DBusSignalFlags.NONE,
+                                   self.on_xfconf, None)
+        # The registrar forgets everything when it restarts (e.g. when the panel restarts),
+        # so (re)register all windows every time it appears on the bus.
+        Gio.bus_watch_name_on_connection(self.conn, "com.canonical.AppMenu.Registrar",
+                                         Gio.BusNameWatcherFlags.NONE, self.on_registrar, None)
+
+    def on_monitors(self, *_args):
+        if self.mon_timer:
+            GLib.source_remove(self.mon_timer)
+        self.mon_timer = GLib.timeout_add_seconds(3, self.sync_monitors)
+
+    @staticmethod
+    def read_cables():
+        state = {}
+        try:
+            for name in os.listdir("/sys/class/drm"):
+                try:
+                    with open("/sys/class/drm/%s/status" % name) as fh:
+                        state[name] = fh.read().strip()
+                except OSError:
+                    pass
+        except OSError:
+            pass
+        return state
+
+    def check_cables(self):
+        now = self.read_cables()
+        if now != self.cables:
+            self.cables = now
+            self.on_monitors()
+        return True
+
+    def sync_monitors(self):
+        self.mon_timer = 0
+        print("cupertino-menud: syncing wallpaper and menu bars with the monitors", file=sys.stderr, flush=True)
+        run(shutil.which("cupertino-xfce-mode") or os.path.expanduser("~/.local/bin/cupertino-xfce-mode"), "monitors")
+        return False
+
+    def on_xfconf(self, _conn, _sender, _path, _iface, _signal, params, _data):
+        channel, prop, value = params.unpack()
+        if channel != "xfce4-desktop" or not prop.endswith("/last-image") or not isinstance(value, str):
+            return
+        # Only mirror the user's own picks: xfdesktop also writes this key on its own
+        # (e.g. a default for a monitor it hasn't seen), and that must not spread.
+        if subprocess.run(["pgrep", "-u", str(os.getuid()), "-f", "xfdesktop-settings"],
+                          stdout=subprocess.DEVNULL).returncode != 0:
+            return
+        first = self.wall_pending is None
+        self.wall_pending = value
+        if first:
+            GLib.timeout_add(400, self.mirror_wallpaper)
+
+    def mirror_wallpaper(self):
+        value, self.wall_pending = self.wall_pending, None
+        try:
+            props = self.conn.call_sync("org.xfce.Xfconf", "/org/xfce/Xfconf", "org.xfce.Xfconf",
+                                        "GetAllProperties", GLib.Variant("(ss)", ("xfce4-desktop", "/backdrop")),
+                                        None, Gio.DBusCallFlags.NONE, 3000, None).unpack()[0]
+        except GLib.Error as e:
+            print(f"cupertino-menud: wallpaper: {e.message}", file=sys.stderr)
+            return False
+        for key, cur in props.items():
+            if key.endswith("/last-image") and "/workspace" in key and cur != value:
+                self.conn.call("org.xfce.Xfconf", "/org/xfce/Xfconf", "org.xfce.Xfconf", "SetProperty",
+                               GLib.Variant("(ssv)", ("xfce4-desktop", key, GLib.Variant("s", value))),
+                               None, Gio.DBusCallFlags.NONE, 3000, None, None, None)
+        return False
+
+    def on_registrar(self, *_args):
+        self.ours.clear()
+        self.screen.force_update()
+        for w in self.screen.get_windows():
+            self.check(w)
+        self.on_active(self.screen, None)
+
+    def registrar_menu(self, xid):
+        try:
+            return self.conn.call_sync("com.canonical.AppMenu.Registrar", "/com/canonical/AppMenu/Registrar",
+                                       "com.canonical.AppMenu.Registrar", "GetMenuForWindow",
+                                       GLib.Variant("(u)", (xid,)), None, Gio.DBusCallFlags.NONE, 1500, None).unpack()
+        except GLib.Error:
+            return ("", "/")
+
+    def alive(self, name):
+        try:
+            return self.conn.call_sync("org.freedesktop.DBus", "/org/freedesktop/DBus", "org.freedesktop.DBus",
+                                       "NameHasOwner", GLib.Variant("(s)", (name,)), GLib.VariantType("(b)"),
+                                       Gio.DBusCallFlags.NONE, 1500, None).unpack()[0]
+        except GLib.Error:
+            return True
+
+    def gtk_menu_has_items(self, xid):
+        p = xprops(xid, "_GTK_UNIQUE_BUS_NAME", "_GTK_MENUBAR_OBJECT_PATH")
+        bus, path = p.get("_GTK_UNIQUE_BUS_NAME"), p.get("_GTK_MENUBAR_OBJECT_PATH")
+        if not bus or not path:
+            return False
+        try:
+            groups = self.conn.call_sync(bus, path, "org.gtk.Menus", "Start", GLib.Variant("(au)", ([0],)),
+                                         None, Gio.DBusCallFlags.NONE, 1500, None).unpack()[0]
+            self.conn.call(bus, path, "org.gtk.Menus", "End", GLib.Variant("(au)", ([0],)),
+                           None, Gio.DBusCallFlags.NONE, 1500, None, None, None)
+        except GLib.Error:
+            return False
+        return any(items for _g, _m, items in groups)
+
+    @staticmethod
+    def profile_for(w):
+        if w.get_window_type() == Wnck.WindowType.DESKTOP:
+            return "desktop"
+        cls = " ".join(filter(None, (w.get_class_group_name(), w.get_class_instance_name()))).lower()
+        if any(b in cls for b in BROWSERS):
+            return "browser"
+        if any(t in cls for t in TERMINALS):
+            return "terminal"
+        return "generic"
+
+    def check(self, w):
+        self.opened.pop(w.get_xid() if w else 0, None)
+        if w is None or w.get_window_type() not in (Wnck.WindowType.NORMAL, Wnck.WindowType.DESKTOP):
+            return False
+        xid = w.get_xid()
+        service, path = self.registrar_menu(xid)
+        if service and service != self.me and not path.startswith(BASE_PATH) and self.alive(service):
+            return False          # the app has its own menu
+        if service == self.me and xid in self.ours:
+            return False          # already ours
+        if self.gtk_menu_has_items(xid):
+            return False
+        profile = self.profile_for(w)
+        try:
+            self.conn.call_sync("com.canonical.AppMenu.Registrar", "/com/canonical/AppMenu/Registrar",
+                                "com.canonical.AppMenu.Registrar", "RegisterWindow",
+                                GLib.Variant("(uo)", (xid, f"{BASE_PATH}/{profile}")),
+                                None, Gio.DBusCallFlags.NONE, 1500, None)
+            self.ours.add(xid)
+        except GLib.Error as e:
+            print(f"cupertino-menud: register {xid:#x}: {e.message}", file=sys.stderr)
+        return False
+
+    def on_opened(self, _screen, w):
+        # give the app a moment to export its own menu before deciding
+        self.opened[w.get_xid()] = time.monotonic()
+        GLib.timeout_add(1500, self.check, w)
+
+    def on_active(self, screen, _prev):
+        w = screen.get_active_window()
+        if w is not None and w.get_window_type() in (Wnck.WindowType.NORMAL, Wnck.WindowType.DESKTOP):
+            self.last_xid = w.get_xid()
+            young = time.monotonic() - self.opened.get(self.last_xid, 0) < 1.5
+            if self.last_xid not in self.ours and not young:
+                self.check(w)
+
+
+def main():
+    Gtk.init(sys.argv)
+    Daemon()
+    Gtk.main()
+
+
+if __name__ == "__main__":
+    main()

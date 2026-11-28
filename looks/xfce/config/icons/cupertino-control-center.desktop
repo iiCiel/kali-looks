@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Control Center
+Comment=Wi-Fi, Bluetooth, Focus, appearance, display and sound
+Exec=cupertino-control-center
+Icon=cupertino-control-center-symbolic
+Categories=Settings;
+StartupNotify=false

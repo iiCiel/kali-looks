@@ -1,0 +1,77 @@
+/* cupertino-xfce: Mission Control-style window overview (Ctrl+Up).
+   Live window thumbnails need a compositor (picom). Type to filter, Enter to switch.
+   Keep one property per line: rofi 2.0 mis-parses several quoted values on one line. */
+configuration {
+  modi: "window";
+  show-icons: true;
+  window-thumbnail: true;
+  icon-theme: "{{ICON_THEME}}";
+  font: "Inter 11";
+  window-format: "{t}";
+  display-window: "";
+}
+* {
+  background-color: transparent;
+  text-color: #ffffff;
+}
+window {
+  transparency: "real";
+  fullscreen: true;
+  background-color: rgba(12, 12, 22, 62%);
+  padding: 7% 6%;
+}
+mainbox {
+  spacing: 30px;
+  children: [ searchrow, listview ];
+}
+searchrow {
+  orientation: horizontal;
+  expand: false;
+  children: [ padl, inputbar, padr ];
+}
+padl {
+  expand: true;
+}
+padr {
+  expand: true;
+}
+inputbar {
+  expand: false;
+  padding: 6px 12px;
+  border-radius: 9px;
+  background-color: rgba(255, 255, 255, 14%);
+  children: [ entry ];
+}
+entry {
+  placeholder: "Search windows";
+  placeholder-color: rgba(255,255,255,60%);
+  horizontal-align: 0.5;
+  width: 220px;
+}
+listview {
+  columns: 4;
+  lines: 3;
+  spacing: 36px;
+  flow: horizontal;
+  fixed-columns: true;
+  scrollbar: false;
+}
+element {
+  orientation: vertical;
+  padding: 12px;
+  spacing: 10px;
+  border-radius: 14px;
+}
+element selected {
+  background-color: rgba(255, 255, 255, 12%);
+  border: 2px;
+  border-color: rgba(10, 132, 255, 90%);
+}
+element-icon {
+  size: 260px;
+  horizontal-align: 0.5;
+}
+element-text {
+  horizontal-align: 0.5;
+  vertical-align: 0.5;
+}

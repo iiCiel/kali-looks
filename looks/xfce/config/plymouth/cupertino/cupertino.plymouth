@@ -1,0 +1,8 @@
+[Plymouth Theme]
+Name=Cupertino
+Description=cupertino-xfce: black screen with a clean progress bar
+ModuleName=script
+
+[script]
+ImageDir=/usr/share/plymouth/themes/cupertino
+ScriptFile=/usr/share/plymouth/themes/cupertino/cupertino.script

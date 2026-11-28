@@ -1,0 +1,46 @@
+
+/* >>> cupertino-xfce: macOS-style login box >>> */
+/* WhiteSur makes hint text orange; macOS uses a soft white over the wallpaper. */
+@define-color placeholder_text_color rgba(255, 255, 255, 0.62);
+
+/* No box-shadow: the login box has no compositor behind it, so a shadow would be
+   clipped into dark square corners. */
+#login_window {
+  background-color: rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 20px;
+  box-shadow: none;
+}
+#content_frame, #buttonbox_frame {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+#prompt_entry {
+  border-radius: 10px;
+  background-color: rgba(0, 0, 0, 0.28);
+  color: #ffffff;
+  caret-color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.30);
+  box-shadow: none;
+}
+#prompt_entry:focus {
+  border-color: rgba(255, 255, 255, 0.65);
+}
+#login_window button {
+  border-radius: 10px;
+  background-color: rgba(0, 0, 0, 0.22);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  box-shadow: none;
+}
+#login_window label {
+  color: #ffffff;
+}
+#panel_window {
+  background-color: rgba(255, 255, 255, 0.12);
+}
+#panel_window menubar > menuitem, #panel_window label {
+  color: #ffffff;
+}
+/* <<< cupertino-xfce <<< */

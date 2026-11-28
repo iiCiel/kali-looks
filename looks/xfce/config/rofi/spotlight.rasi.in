@@ -1,0 +1,81 @@
+/* cupertino-xfce: Spotlight-style launcher (Super+Space).
+   Keep one property per line: rofi 2.0 mis-parses several quoted values on one line. */
+configuration {
+  modi: "drun,run,window";
+  show-icons: true;
+  icon-theme: "{{ICON_THEME}}";
+  font: "Inter 13";
+  display-drun: "";
+  drun-display-format: "{name}";
+  matching: "fuzzy";
+  sort: true;
+}
+* {
+  bg: {{SP_BG}};
+  bgsel: rgba(10, 132, 255, 92%);
+  fg: {{SP_FG}};
+  fgdim: {{SP_FGDIM}};
+  background-color: transparent;
+  text-color: @fg;
+}
+window {
+  transparency: "real";
+  location: north;
+  anchor: north;
+  y-offset: 240px;
+  width: 680px;
+  border-radius: 14px;
+  border: 1px;
+  border-color: {{SP_BORDER}};
+  background-color: @bg;
+}
+mainbox {
+  padding: 10px;
+  spacing: 8px;
+  children: [ inputbar, listview ];
+}
+inputbar {
+  padding: 8px 10px;
+  spacing: 12px;
+  children: [ icon-search, entry ];
+}
+icon-search {
+  expand: false;
+  filename: "search";
+  size: 26px;
+  vertical-align: 0.5;
+}
+entry {
+  placeholder: "Spotlight Search";
+  placeholder-color: @fgdim;
+  font: "Inter 20";
+  vertical-align: 0.5;
+}
+listview {
+  lines: 7;
+  fixed-height: false;
+  dynamic: true;
+  scrollbar: false;
+  spacing: 2px;
+  border: 1px 0 0 0;
+  border-color: {{SP_LINE}};
+  padding: 8px 0 0 0;
+}
+element {
+  padding: 7px 10px;
+  spacing: 12px;
+  border-radius: 8px;
+}
+element selected {
+  background-color: @bgsel;
+  text-color: #ffffff;
+}
+element-icon {
+  size: 28px;
+  vertical-align: 0.5;
+}
+element-text {
+  vertical-align: 0.5;
+  highlight: bold;
+  text-color: inherit;
+}
