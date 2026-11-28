@@ -7,6 +7,7 @@ step checks first and changes nothing when it's already right.
   tahoe-finish.py <look config tree>
 """
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -350,10 +351,11 @@ def kvantum(tree):
             if not src.exists():
                 continue
             target = dst / (name + ext)
-            if not target.exists() or target.read_bytes() != src.read_bytes():
+            if not target.exists():
                 dst.mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(src, target)
                 log(f"Kvantum: {name}{ext} in place")
+        solid_content(dst / (name + ".kvconfig"))
     chooser = kv / "kvantum.kvconfig"
     text = chooser.read_text() if chooser.exists() else ""
     if re.search(r"(?m)^theme=mac-tahoe-liquid-kde(Dark)?$", text):
@@ -401,17 +403,212 @@ def spotlight(tree):
         log("Spotlight (KRunner) floats mid-screen")
 
 
+# --- the Dock, as on a Mac with default settings -----------------------------------------
+ICONTASKS = "org.kde.mac.tahoe.liquid.icontasks"
+
+
+def dock(tree):
+    """Magnification off (a Mac's default), only app names on hover, and windows stop
+    above the Dock, as Zoom fills the space between the Dock and the menu bar."""
+    path = Path(tree) / "plasma-org.kde.plasma.desktop-appletsrc"
+    if not path.exists():
+        return
+    cfg = KConfig(path)
+    docks = []
+    for cid in cfg.children("Containments"):
+        c = ["Containments", str(cid)]
+        if cfg.get(c, "plugin") != "org.kde.panel":
+            continue
+        for a in cfg.children(*c, "Applets"):
+            if cfg.get(c + ["Applets", str(a)], "plugin") == ICONTASKS:
+                cfg.set(c + ["Applets", str(a), "Configuration", "General"], "dockMagnification", "100")
+                # pointing at an open app shows its name, not KDE's window preview
+                cfg.set(c + ["Applets", str(a), "Configuration", "General"], "showToolTips", "false")
+                docks.append(cid)
+    if cfg.save():
+        log("Dock: no magnification, names only on hover")
+    rcpath = Path(tree) / "plasmashellrc"
+    if docks and rcpath.exists():
+        rc = KConfig(rcpath)
+        for cid in docks:
+            rc.set(["PlasmaViews", f"Panel {cid}"], "panelVisibility", "0")
+        if rc.save():
+            log("Dock: windows stop above it")
+
+
+DOCK_QML = {
+    # plasmoid: [(old, new), ...]; the icon stays as it is under the pointer
+    TAHOE + "trashcan": [("active: mouseArea.containsMouse || root.containsAcceptableDrag",
+                          "active: root.containsAcceptableDrag /* kali-looks */"),
+                         ("hovered: mouseArea.containsMouse", "hovered: false /* kali-looks */"),
+                         # the label says "Trash", as on a Mac (no item count)
+                         ("            subText: root.toolTipSubText", "            subText: \"\" /* kali-looks */")],
+    TAHOE + "downloads": [("active: pointer.containsMouse || popup.visible", "active: false /* kali-looks */"),
+                          ("hovered: pointer.containsMouse", "hovered: false /* kali-looks */")],
+    TAHOE + "launcher": [("active: mouseArea.containsMouse", "active: false /* kali-looks */"),
+                         ("hovered: mouseArea.containsMouse", "hovered: false /* kali-looks */")],
+}
+
+
+def dock_hover():
+    """Apps, Downloads and Trash: no wash or growth under the pointer (Trash still
+    darkens while you drag something over it, as on a Mac)."""
+    for plasmoid, edits in DOCK_QML.items():
+        for qml in sorted((PLASMOIDS / plasmoid / "contents/ui").glob("*.qml")):
+            s = qml.read_text()
+            n = s
+            for old, new in edits:
+                n = n.replace(old, new)
+            if n != s:
+                qml.write_text(n)
+                log(f"Dock: {plasmoid.rsplit('.', 1)[-1]} icon steady under the pointer")
+
+
+def dock_dots():
+    """The running-app dots are dark in light mode on a Mac; the theme draws them white."""
+    import gzip
+    svg = HOME / ".local/share/plasma/desktoptheme/MacTahoeLiquidKde-Light/widgets/tasks.svgz"
+    if not svg.exists():
+        return
+    s = gzip.open(svg).read().decode()
+    def recolor(m):
+        return m.group(0).replace('fill="#ffffff"', 'fill="#1d1d1f"')
+    n = re.sub(r'<rect\b[^>]*\bid="rect1153-3(?:-10|-0)?"[^>]*>', recolor, s)
+    if n != s:
+        with gzip.open(svg, "wb") as f:
+            f.write(n.encode())
+        for cache in (HOME / ".cache").glob("plasma_theme_MacTahoeLiquidKde-Light*.kcache"):
+            cache.unlink(missing_ok=True)
+        (HOME / ".cache/ksvg-elements").unlink(missing_ok=True)
+        log("Dock: running dots dark, as in light mode on a Mac")
+
+
+SOLID_KEYS = ("base.color", "inactive.base.color", "alt.base.color", "inactive.alt.base.color")
+
+
+def solid_content(kvconfig):
+    """macOS keeps content areas (file lists, text, tables) solid and puts the glass in
+    sidebars and toolbars; the theme made them 55% see-through."""
+    if not kvconfig.exists():
+        return
+    s = kvconfig.read_text()
+    n = s
+    for key in SOLID_KEYS:
+        n = re.sub(rf"(?m)^({re.escape(key)}=#[0-9A-Fa-f]{{6}})[0-9A-Fa-f]{{2}}$", r"\1", n)
+    if n != s:
+        kvconfig.write_text(n)
+        log(f"Kvantum: solid content areas in {kvconfig.stem}")
+
+
+# --- glass: run the Tahoe Shell's own generator on this look's settings ---------------
+GLASS_SCRIPT = HOME / ".local/share/kali-looks/src/macos-tahoe/src/scripts/glass_surface_settings.py"
+
+
+def glass(tree):
+    """The generator makes the Finder profile for Dolphin and the windows' glass (and
+    the Dock's) from the materials in kwinrc. It ran before this look had its own
+    Kvantum folder, so Finder and the windows never got theirs."""
+    kwinrc = Path(tree) / "kwinrc"
+    if not GLASS_SCRIPT.exists() or not kwinrc.exists():
+        return
+    cfg = KConfig(kwinrc)
+    raw = cfg.get(["Effect-liquidglass"], "ComponentMaterials", "")
+    try:
+        materials = json.loads(raw) if raw else None
+    except ValueError:
+        materials = None
+    if not materials or "dock" not in materials:
+        return
+    finder = Path(tree) / "Kvantum/mac-tahoe-liquid-kdeFinder"
+    if finder.is_dir():
+        return
+    env = dict(os.environ, XDG_CONFIG_HOME=str(tree))
+    r = subprocess.run([sys.executable, str(GLASS_SCRIPT), "--apply"], input=json.dumps(materials),
+                       capture_output=True, text=True, env=env, timeout=120)
+    if r.returncode == 0:
+        log("glass: Dock, windows and Finder profile generated")
+    else:
+        log("glass: generator failed: " + (r.stderr or r.stdout).strip()[:300])
+
+
+# --- Finder: the file manager's name and sidebar, in this look only --------------------
+LANG_VARIANT = "en_KL"   # an English "variant" holding only Finder's names
+ENV_SCRIPT = """# kali-looks: Finder's names in the macOS Tahoe look. The en_KL English variant
+# (~/.local/share/locale/en_KL) only renames Dolphin to Finder and its sidebar sections;
+# everything else stays standard English. This look only; cleared when you switch.
+case "${LANG:-en}" in
+  en*|C|C.*|POSIX) case ":${LANGUAGE:-}:" in *:en_KL:*) ;; *) export LANGUAGE="en_KL:${LANGUAGE:-en_US}" ;; esac ;;
+esac
+"""
+
+
+def finder_names(tree):
+    """Dolphin is Finder here: in the menu bar, the Dock label, its windows' titles
+    ("Downloads — Finder") and its sidebar (Favorites, Shared, Recents, Locations)."""
+    msgs = HOME / ".local/share/locale" / LANG_VARIANT / "LC_MESSAGES"
+    for po in sorted((HERE / "locale").glob("*.po")):
+        mo = msgs / (po.stem + ".mo")
+        if not mo.exists() or mo.stat().st_mtime < po.stat().st_mtime:
+            msgs.mkdir(parents=True, exist_ok=True)
+            if subprocess.run(["msgfmt", "-o", str(mo), str(po)]).returncode == 0:
+                log(f"Finder: {po.stem} names in place")
+    env = Path(tree) / "plasma-workspace/env/kali-looks-finder.sh"
+    if not env.exists() or env.read_text() != ENV_SCRIPT:
+        env.parent.mkdir(parents=True, exist_ok=True)
+        env.write_text(ENV_SCRIPT)
+        log("Finder: names on for this look")
+    # the launcher entry (menu bar and Dock show its name); kali-looks keeps it in place
+    # only while this look runs, like XP's and Windows 7's own names for it
+    system = Path("/usr/share/applications/org.kde.dolphin.desktop")
+    own = HOME / ".local/share/applications/org.kde.dolphin.desktop"
+    if system.exists():
+        lines = []
+        for line in system.read_text().splitlines():
+            if re.match(r"Name\[[^\]]+\]=", line):
+                continue
+            lines.append("Name=Finder" if line.startswith("Name=") else line)
+        text = "# kali-looks: Finder in the macOS Tahoe look (made from Dolphin's own entry)\n" + "\n".join(lines) + "\n"
+        if not own.exists() or own.read_text() != text:
+            own.parent.mkdir(parents=True, exist_ok=True)
+            own.write_text(text)
+            log("Finder: menu bar and Dock name")
+
+
+# --- Windows 7's window effects stay out of this look ----------------------------------
+# AeroThemePlasma installs these system-wide and several are on by default, so they ran
+# here too (Aero login, minimize "squash", popups, thumbnails...).
+WINDOWS_EFFECTS = ("aeroglassblur", "aeroglide", "smodsnap", "smodglow", "smodpeekeffect",
+                   "aeroshell-thumbnails", "dimscreenaero", "fadingpopupsaero", "loginaero", "squashaero")
+
+
+def no_windows_effects(tree):
+    path = Path(tree) / "kwinrc"
+    if not path.exists():
+        return
+    cfg = KConfig(path)
+    for effect in WINDOWS_EFFECTS:
+        cfg.set(["Plugins"], effect + "Enabled", "false")
+    if cfg.save():
+        log("KWin: Windows 7's effects off in this look")
+
+
 def main():
     if len(sys.argv) != 2:
         sys.exit(__doc__)
     tree = sys.argv[1]
     install_plasmoids()
     kvantum(tree)
+    glass(tree)
+    no_windows_effects(tree)
     no_bell()
     wallpaper_defaults()
     menu_bar(tree)
     desktop_menu(tree)
+    dock(tree)
+    dock_hover()
+    dock_dots()
     spotlight(tree)
+    finder_names(tree)
 
 
 if __name__ == "__main__":

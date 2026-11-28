@@ -1,0 +1,22 @@
+# kali-looks: Finder's sidebar sections in the macOS Tahoe look.
+# Installed as the "en_KL" English variant, used only in that session (see tahoe-finish.py).
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Language: en\n"
+
+msgctxt "@item"
+msgid "Places"
+msgstr "Favorites"
+
+msgctxt "@item"
+msgid "Devices"
+msgstr "Locations"
+
+msgctxt "@item"
+msgid "Remote"
+msgstr "Shared"
+
+msgctxt "@item The place group section name for recent dynamic lists"
+msgid "Recent"
+msgstr "Recents"

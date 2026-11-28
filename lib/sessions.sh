@@ -194,6 +194,7 @@ win7|.local/share/wallpapers/kali-looks-aero
 win7|.local/share/plasma/plasmoids/io.gitgud.wackyideas.SevenStart
 win7|.local/share/plasma/plasmoids/io.gitgud.wackyideas.seventasks
 macos|.local/share/applications/mac-tahoe-clipboard.desktop
+macos|.local/share/applications/org.kde.dolphin.desktop
 macos|.local/share/applications/org.kde.mac-tahoe-liquid-kde.apps.desktop
 macos|.local/share/applications/org.kde.mac-tahoe-liquid-kde.settings.desktop
 base|.local/share/applications/cupertino-launchpad.desktop
@@ -369,8 +370,8 @@ restore_session_env() {
 
 # Variables a look's session start sets that would otherwise stay in the shared systemd
 # environment for the next look: Windows 7's (startatp) gave Windows XP its UAC prompt
-# and desktop shell.
-LOOK_ENV_VARS=(USE_UAC_AGENT PLASMA_DEFAULT_SHELL QML_DISABLE_DISTANCEFIELD)
+# and desktop shell; macOS Tahoe's LANGUAGE carries Finder's names.
+LOOK_ENV_VARS=(USE_UAC_AGENT PLASMA_DEFAULT_SHELL QML_DISABLE_DISTANCEFIELD LANGUAGE)
 clear_look_env() {
   # D-Bus can't unset, only set empty. dbus-broker also hands those empty values on
   # to systemd, and an empty PLASMA_DEFAULT_SHELL makes plasmashell look for a shell

@@ -1,0 +1,9 @@
+# kali-looks: in the macOS Tahoe look, the file manager is Finder.
+# Installed as the "en_KL" English variant, used only in that session (see tahoe-finish.py).
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Language: en\n"
+
+msgid "Dolphin"
+msgstr "Finder"

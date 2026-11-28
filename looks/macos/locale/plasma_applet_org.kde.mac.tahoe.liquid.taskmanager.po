@@ -1,0 +1,12 @@
+# kali-looks: Dock labels named as on a Mac (the theme's icons for these roles are
+# Finder's and QuickTime Player's). "en_KL" English variant, macOS Tahoe look only.
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Language: en\n"
+
+msgid "Files"
+msgstr "Finder"
+
+msgid "Video"
+msgstr "QuickTime Player"
