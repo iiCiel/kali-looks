@@ -1,23 +1,23 @@
 # cupertino-xfce: macOS-style frosted dock for Plank Reloaded (Cupertino-Dark)
 [PlankTheme]
-TopRoundness=16
-BottomRoundness=16
+TopRoundness=18
+BottomRoundness=18
 LineWidth=1
-OuterStrokeColor=255;;255;;255;;40
-FillStartColor=50;;50;;58;;214
-FillEndColor=38;;38;;46;;214
-InnerStrokeColor=255;;255;;255;;14
+OuterStrokeColor=255;;255;;255;;45
+FillStartColor=52;;52;;60;;190
+FillEndColor=36;;36;;44;;190
+InnerStrokeColor=255;;255;;255;;18
 
 [PlankDockTheme]
-HorizPadding=1.4
-TopPadding=1.1
-BottomPadding=2.1
-ItemPadding=1.7
+HorizPadding=5
+TopPadding=5
+BottomPadding=9
+ItemPadding=4
 SeparatorPadding=-1
 IndicatorColor=245;;245;;247;;230
-IndicatorSize=1.1
+IndicatorSize=1.2
 IndicatorStyle=2
-IconShadowSize=0.4
+IconShadowSize=0.6
 UrgentBounceHeight=1.2
 LaunchBounceHeight=0.8
 FadeOpacity=1
