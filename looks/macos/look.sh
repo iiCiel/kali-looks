@@ -26,6 +26,8 @@ look_prepare() {
 look_setup() {
   # Finder's full menu (Finder, File, Edit, View, Go, Window, Help) in the menu bar
   python3 "$LOOK_DIR/patch-finder-menu.py" "$MAC_SRC" || warn "Couldn't patch the Finder menu"
+  # menu bar text white over the wallpaper (black over a very light one), as on a Mac
+  python3 "$LOOK_DIR/patch-menubar-ink.py" "$MAC_SRC" || warn "Couldn't patch the menu bar colors"
   log "Installing macOS Tahoe into its session (asks for your password; takes a few minutes)"
   # shellcheck disable=SC2016
   look_root env MTTKDE_NO_CONFIRM=1 MAC_TAHOE_NO_UPDATE_CHECK=true MTTKDE_NO_GRUB_MODIFY=1 \
