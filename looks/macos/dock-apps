@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+# kali-looks: running apps for the macOS Dock, with or without a window.
+#
+# A Mac Dock puts a dot under every running app and offers Quit for it, even when the
+# app has no window open (Discord or Steam closed to the menu bar, say). Plasma's task
+# manager only knows about windows, so the Dock asks this instead. Plasma starts every
+# app it launches (Dock, menu, autostart, session restore) in its own systemd unit,
+# app-<desktop id>@<random>.service or app-<desktop id>-<pid>.scope, which names the app.
+#
+#   dock-apps list [--dock]  desktop ids of the running apps, one per line
+#                            (--dock: only real apps, the ones the app menu shows)
+#   dock-apps quit <id>    quit that app: all its processes get SIGTERM, as Quit asks
+set -u
+
+units() {
+  systemctl --user list-units --state=running --plain --no-legend 'app-*' 2>/dev/null | awk '{print $1}'
+}
+
+id_of() { # id_of <unit>: the desktop id it belongs to (escapes undone)
+  local u=${1#app-}
+  case $u in
+    *@*) u=${u%%@*} ;;
+    *.scope) u=${u%.scope}; [[ $u =~ ^(.+)-[0-9]+$ ]] && u=${BASH_REMATCH[1]} ;;
+    *.service) u=${u%.service} ;;
+  esac
+  systemd-escape -u -- "$u" 2>/dev/null || printf '%s\n' "$u"
+}
+
+dock_app() { # dock_app <id>: true if it's an app the menu shows (helpers and services aren't)
+  local d f
+  for d in "${XDG_DATA_HOME:-$HOME/.local/share}" ${XDG_DATA_DIRS:-/usr/local/share:/usr/share} \
+      "$HOME/.local/share/flatpak/exports/share" /var/lib/flatpak/exports/share; do
+    for d in ${d//:/ }; do
+      f=$d/applications/$1.desktop
+      [[ -f $f ]] || continue
+      ! grep -q -E '^(NoDisplay|Hidden)=true' "$f" && grep -q '^Type=Application' "$f"
+      return
+    done
+  done
+  return 1
+}
+
+case ${1:-} in
+  list)
+    units | while read -r u; do id_of "$u"; done | sort -u | while read -r id; do
+      [[ ${2:-} != --dock ]] || dock_app "$id" || continue
+      echo "$id"
+    done ;;
+  quit)
+    id=${2:-}
+    [[ $id =~ ^[A-Za-z0-9._-]+$ ]] || { echo "usage: dock-apps quit <desktop id>" >&2; exit 2; }
+    mapfile -t mine < <(units | while read -r u; do [[ $(id_of "$u") == "$id" ]] && echo "$u"; done)
+    (( ${#mine[@]} )) || exit 1
+    systemctl --user stop --no-block -- "${mine[@]}" ;;
+  *) echo "usage: dock-apps list | quit <desktop id>" >&2; exit 2 ;;
+esac

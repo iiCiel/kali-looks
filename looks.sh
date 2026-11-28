@@ -214,6 +214,7 @@ case "${1:-help}" in
   desktop-rights) shift; cmd_desktop_rights "$@" ;;
   session-hook) cmd_session_hook "${2:-}" ;;
   session-start) cmd_session_start ;;
+  dock-apps) shift; exec "$HERE/looks/macos/dock-apps" "$@" ;;
   sandbox)
     [[ ${2:-} != xfce ]] || die "macOS (Xfce) is your own Xfce desktop; it has no hidden session."
     shift; cmd_sandbox "$@" ;;
