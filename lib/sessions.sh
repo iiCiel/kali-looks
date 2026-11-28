@@ -308,6 +308,7 @@ cmd_session_hook() {
     state_set ACTIVE "$look"
     fix_polkit_agent
     look_only_autostart "$look" "$target"
+    unused_autostart "$target"
     python3 "$HERE/lib/same-keyring.py" "$target" || true
     systemctl --user daemon-reload 2>/dev/null || true
     stop_orphan_units
@@ -415,6 +416,30 @@ look_only_autostart() { # look_only_autostart <look> <its config folder>
         printf '[Desktop Entry]\nType=Application\nName=%s\nHidden=true\nX-KaliLooks=look-only\n' "${f%.desktop}" >"$dir/$f"
       fi
     done
+  done
+}
+
+# Background programs that do nothing on this laptop, kept from starting (each one
+# starts again by itself once it has something to do):
+# - the printer tray applet, while no printing system (CUPS) is installed
+# - KDE's accessibility service (sticky/slow/bounce keys, mouse keys, visual bell),
+#   while none of those is turned on; turning one on in System Settings starts it
+unused_autostart() { # unused_autostart <look's config folder>
+  local dir="$1/autostart" f unused
+  for f in print-applet.desktop kaccess.desktop; do
+    [[ -e /etc/xdg/autostart/$f ]] || continue
+    case $f in
+      print-applet.desktop) command -v lpstat >/dev/null && unused= || unused=1 ;;
+      kaccess.desktop) grep -qsi '=true' "$1/kaccessrc" && unused= || unused=1 ;;
+    esac
+    if [[ -n $unused ]]; then
+      if ! [[ -e $dir/$f ]]; then
+        mkdir -p "$dir"
+        printf '[Desktop Entry]\nType=Application\nName=%s\nHidden=true\nX-KaliLooks=unused\n' "${f%.desktop}" >"$dir/$f"
+      fi
+    elif grep -qs '^X-KaliLooks=unused' "$dir/$f"; then
+      rm -f "$dir/$f"
+    fi
   done
 }
 
